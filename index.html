@@ -152,20 +152,22 @@
   .pad-desc:focus{ outline:none; border-color:var(--blue); }
 
   /* ---------- wheel ---------- */
-  .wheel{ position:relative; height:242px; margin:4px 0 6px; }
-  .wheel-band{ position:absolute; left:0; right:0; top:99px; height:44px; border-radius:12px;
-    background:var(--blue-soft); pointer-events:none; }
-  .wheel-band .cur{ position:absolute; inset-inline-start:calc(50% + 34px); top:0; line-height:44px;
-    font-size:17px; font-weight:600; color:var(--blue); }
-  .wheel-scroll{ position:relative; height:242px; overflow-y:scroll; scroll-snap-type:y mandatory;
-    -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  /* Row height is the one number everything derives from — band, spacers and the
+     JS index all read it, so nothing can drift out of step with the rows. */
+  .wheel{ --row:44px; --view:242px; position:relative; height:var(--view); margin:4px 0 6px; }
+  .wheel-band{ position:absolute; left:0; right:0; top:50%; height:var(--row);
+    transform:translateY(-50%); border-radius:12px; background:var(--blue-soft); pointer-events:none; }
+  .wheel-scroll{ position:relative; height:var(--view); overflow-y:scroll; scroll-snap-type:y mandatory;
+    -webkit-overflow-scrolling:touch; scrollbar-width:none; overscroll-behavior:contain; }
   .wheel-scroll::-webkit-scrollbar{ display:none; }
-  .wheel-scroll .spacer{ height:99px; }
-  .w-item{ height:44px; line-height:44px; text-align:center; scroll-snap-align:center;
-    font-size:26px; font-weight:500; color:#B9BECB; font-variant-numeric:tabular-nums;
-    transition:color .12s, transform .12s; }
+  .wheel-scroll .spacer{ height:calc((var(--view) - var(--row)) / 2); flex:none; }
+  .w-item{ height:var(--row); scroll-snap-align:center; display:flex; align-items:baseline;
+    justify-content:center; gap:5px; font-size:26px; font-weight:500; color:#B9BECB;
+    font-variant-numeric:tabular-nums; transition:color .12s, transform .12s; }
+  .w-item .cur{ font-size:0; font-weight:600; color:var(--blue); transition:font-size .12s; }
   .w-item.near{ color:#7A8090; }
-  .w-item.sel{ color:var(--ink); font-weight:700; transform:scale(1.14); }
+  .w-item.sel{ color:var(--ink); font-weight:700; transform:scale(1.12); }
+  .w-item.sel .cur{ font-size:15px; }
   /* fade the ends so the column reads as a drum rather than a cut-off list */
   .wheel::before,.wheel::after{ content:''; position:absolute; left:0; right:0; height:88px;
     pointer-events:none; z-index:2; }
@@ -278,7 +280,7 @@
   <div class="grab"></div>
   <div class="pad-title">כמה שילמת במזומן?</div>
   <div class="wheel">
-    <div class="wheel-band"><span class="cur">₪</span></div>
+    <div class="wheel-band" id="wheelBand"></div>
     <div class="wheel-scroll" id="wheelScroll">
       <div class="spacer"></div>
       <div class="spacer"></div>
@@ -627,7 +629,6 @@ $('syncBtn').addEventListener('click',()=>{ closeSheet(); syncFromApi(false); })
 /* ---------------- wheel ---------------- */
 // A scroll wheel, not a keyboard. Steps stay at ₪1 where cash actually lands and open
 // up higher, so any amount is a flick or two away instead of 300 rows of scrolling.
-const WHEEL_ROW = 44;
 const VALUES = (()=>{
   const v=[];
   for(let n=0;n<=60;n++) v.push(n);
@@ -637,18 +638,31 @@ const VALUES = (()=>{
 })();
 
 let wheelIndex=0;
+let wheelItems=[];
 
 function buildWheel(){
   const box=$('wheelScroll');
-  const items=VALUES.map(v=>`<div class="w-item">${v}</div>`).join('');
-  box.innerHTML='<div class="spacer"></div>'+items+'<div class="spacer"></div>';
+  box.innerHTML='<div class="spacer"></div>'
+    + VALUES.map((v,i)=>`<div class="w-item" data-i="${i}"><span>${v}</span><span class="cur">₪</span></div>`).join('')
+    + '<div class="spacer"></div>';
+  wheelItems=[...box.querySelectorAll('.w-item')];
 }
 
 function wheelValue(){ return VALUES[wheelIndex]||0; }
 
+// Ask the layout which row is under the band rather than computing it from a row
+// height. Sub-pixel row heights accumulate — at row 90 an error of half a pixel per
+// row is a whole row off — and this is immune to that by construction.
+function indexUnderBand(){
+  const band=$('wheelBand').getBoundingClientRect();
+  const box=$('wheelScroll').getBoundingClientRect();
+  const el=document.elementFromPoint(box.left+box.width/2, band.top+band.height/2);
+  const item=el&&el.closest?el.closest('.w-item'):null;
+  return item?+item.dataset.i:null;
+}
+
 function paintWheel(){
-  const items=$('wheelScroll').querySelectorAll('.w-item');
-  items.forEach((el,i)=>{
+  wheelItems.forEach((el,i)=>{
     const d=Math.abs(i-wheelIndex);
     el.className='w-item'+(d===0?' sel':d===1?' near':'');
   });
@@ -663,20 +677,19 @@ function paintWheel(){
 }
 
 let wheelTick=null;
+function syncWheel(){
+  const i=indexUnderBand();
+  if(i!==null && i!==wheelIndex){ wheelIndex=i; paintWheel(); }
+}
 $('wheelScroll').addEventListener('scroll',()=>{
   if(wheelTick) return;
-  wheelTick=requestAnimationFrame(()=>{
-    wheelTick=null;
-    const i=Math.max(0,Math.min(VALUES.length-1,Math.round($('wheelScroll').scrollTop/WHEEL_ROW)));
-    if(i!==wheelIndex){ wheelIndex=i; paintWheel(); }
-  });
+  wheelTick=requestAnimationFrame(()=>{ wheelTick=null; syncWheel(); });
 });
 
 // Tapping a row is faster than dragging it into place when it's already on screen.
 $('wheelScroll').addEventListener('click',e=>{
   const el=e.target.closest('.w-item'); if(!el) return;
-  const i=[...$('wheelScroll').querySelectorAll('.w-item')].indexOf(el);
-  $('wheelScroll').scrollTo({top:i*WHEEL_ROW,behavior:'smooth'});
+  el.scrollIntoView({block:'center',behavior:'smooth'});
 });
 
 function openPad(){
@@ -685,6 +698,8 @@ function openPad(){
   $('wheelScroll').scrollTop=0;
   paintWheel();
   $('padScrim').classList.add('open'); $('padSheet').classList.add('open');
+  // The sheet animates in, so the band isn't where it will end up until it settles.
+  setTimeout(syncWheel,320);
 }
 function closePad(){ $('padScrim').classList.remove('open'); $('padSheet').classList.remove('open'); }
 
