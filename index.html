@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>כמה נשאר</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#14181B; --surface:#1C2226; --surface-2:#222A2F;
+    --paper:#F3EEE2; --paper-ink:#2B2620;
+    --line:#333B40; --text:#E8E4DA; --text-dim:#9AA3A8;
+    --amber:#D9A24B; --rust:#C2542F; --green:#7C9A6E;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:'Noto Sans Hebrew', sans-serif;
+    min-height:100vh; display:flex; justify-content:center;
+    padding:18px 12px 48px;
+  }
+  .app{ width:100%; max-width:440px; }
+  .eyebrow{ font-size:12px; letter-spacing:.5px; color:var(--text-dim); margin:2px 4px 12px; font-family:'IBM Plex Mono', monospace; }
+
+  .upload{
+    border:1.5px dashed var(--line); border-radius:14px; padding:14px; text-align:center;
+    cursor:pointer; background:var(--surface); transition:all .2s; margin-bottom:14px;
+  }
+  .upload:active{ border-color:var(--amber); }
+  .upload .big{ font-size:14px; font-weight:600; color:var(--text); margin-bottom:2px; }
+  .upload .small{ font-size:11.5px; color:var(--text-dim); }
+  .upload.loaded .big{ color:var(--green); }
+  input[type=file]{ display:none; }
+
+  .receipt{
+    background:var(--paper); color:var(--paper-ink);
+    border-radius:10px 10px 0 0; padding:22px 22px 18px; text-align:center;
+    box-shadow:0 14px 30px -10px rgba(0,0,0,.55);
+  }
+  .receipt .label{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:#6b6354; margin-bottom:6px; }
+  .receipt .amount{ font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:54px; line-height:1; letter-spacing:-1px; direction:ltr; }
+  .receipt .amount.neg{ color:var(--rust); }
+  .receipt .amount.pos{ color:#3d6b3a; }
+  .receipt .sub{ font-size:12.5px; color:#7a7261; margin-top:8px; }
+  .receipt .sub b{ color:var(--paper-ink); font-weight:600; }
+  .perf{ height:14px; background:var(--paper); position:relative; margin-bottom:16px; }
+  .perf::before{ content:''; position:absolute; left:0; right:0; bottom:0; height:14px; background:radial-gradient(circle at 7px 0, transparent 7px, var(--bg) 7.5px); background-size:14px 14px; background-repeat:repeat-x; }
+
+  .form-card{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:8px; }
+  .row{ display:flex; gap:8px; margin-bottom:10px; }
+  input[type=number], input[type=text]{
+    background:var(--surface-2); border:1px solid var(--line); color:var(--text);
+    border-radius:9px; padding:12px; font-size:15px; font-family:'Noto Sans Hebrew', sans-serif; width:100%;
+  }
+  input[type=number]{ font-family:'IBM Plex Mono', monospace; direction:ltr; text-align:center; max-width:104px; }
+  input::placeholder{ color:var(--text-dim); }
+  input:focus{ outline:2px solid var(--amber); outline-offset:0; }
+  button.add{
+    width:100%; background:var(--amber); color:#22180b; border:none;
+    border-radius:9px; padding:13px; font-size:15px; font-weight:600;
+    font-family:'Noto Sans Hebrew', sans-serif; cursor:pointer;
+  }
+  button.add:active{ transform:scale(.98); }
+  button.clear-month{
+    width:100%; background:var(--surface); color:var(--text-dim); border:1px solid var(--line);
+    border-radius:9px; padding:10px; font-size:13px; font-family:'Noto Sans Hebrew', sans-serif; cursor:pointer; margin-top:8px;
+  }
+
+  .section-title{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); margin:18px 4px 8px; }
+  .ledger{ background:var(--surface); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .entry{ display:flex; align-items:center; justify-content:space-between; padding:11px 14px; border-bottom:1px dashed var(--line); gap:10px; }
+  .entry:last-child{ border-bottom:none; }
+  .entry .desc{ font-size:14px; color:var(--text); flex:1; }
+  .entry .amt{ font-family:'IBM Plex Mono', monospace; font-size:14.5px; color:var(--rust); direction:ltr; }
+  .entry .del{ background:none; border:none; color:var(--text-dim); font-size:15px; cursor:pointer; padding:4px 6px; line-height:1; width:22px; text-align:center; }
+  .entry .del:active{ color:var(--rust); }
+  .empty{ padding:22px 14px; text-align:center; color:var(--text-dim); font-size:13.5px; }
+
+  .summary{ margin-top:16px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 16px; display:flex; flex-direction:column; gap:9px; }
+  .summary .line{ display:flex; justify-content:space-between; align-items:center; font-size:13.5px; color:var(--text-dim); }
+  .summary .line b{ font-family:'IBM Plex Mono', monospace; color:var(--text); font-weight:500; direction:ltr; }
+  .summary .line b.over{ color:var(--rust); }
+  .summary .line b.under{ color:var(--green); }
+
+  .toast{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--surface-2); border:1px solid var(--line); color:var(--text); padding:9px 16px; border-radius:20px; font-size:12.5px; opacity:0; transition:opacity .25s; pointer-events:none; z-index:999; }
+  .toast.show{ opacity:1; }
+  .hidden{ display:none !important; }
+
+  .inv-section{ padding:12px 14px 6px; }
+  .inv-title{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px; }
+  .inv-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px dashed var(--line); gap:10px; }
+  .inv-row:last-child{ border-bottom:none; }
+  .inv-row .name{ font-size:13.5px; color:var(--text); flex:1; }
+  .inv-row .name .count{ color:var(--text-dim); font-size:11.5px; margin-inline-start:5px; }
+  .inv-row .val{ font-family:'IBM Plex Mono', monospace; font-size:13.5px; color:var(--rust); direction:ltr; white-space:nowrap; }
+  .inv-empty{ padding:14px; text-align:center; color:var(--text-dim); font-size:13px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="eyebrow" id="dateLabel">— — —</div>
+
+  <label class="upload" id="uploadZone" for="fileInput">
+    <div class="big" id="uploadBig">טען קובץ חודשי</div>
+    <div class="small" id="uploadSmall">בסיס החודש מהאפליקציה</div>
+    <input type="file" id="fileInput" accept=".csv,text/csv">
+  </label>
+
+  <button class="clear-month hidden" id="investigateBtn" style="margin-bottom:14px; background:var(--surface-2); color:var(--amber); border-color:var(--amber);">🔍 תחקיר החודש</button>
+
+  <div class="ledger hidden" id="investigatePanel" style="margin-bottom:16px;"></div>
+
+  <div class="receipt">
+    <div class="label">נשאר להיום</div>
+    <div class="amount pos" id="remainingToday">₪300</div>
+    <div class="sub" id="todaySub">מתקרה דינמית <b>₪300</b></div>
+  </div>
+  <div class="perf"></div>
+
+  <div class="form-card">
+    <div class="row">
+      <input type="number" id="amountInput" placeholder="₪0" inputmode="decimal" step="0.01">
+      <input type="text" id="descInput" placeholder="על מה?">
+    </div>
+    <button class="add" id="addBtn">הוסף</button>
+    <button class="clear-month" id="clearBtn">אפס חודש חדש</button>
+  </div>
+
+  <div class="section-title">הוצאות היום</div>
+  <div class="ledger" id="todayList">
+    <div class="empty">אין הוצאות היום</div>
+  </div>
+
+  <div class="summary">
+    <div class="line"><span>הוצאת החודש בויזה</span><b id="monthSpent">₪0</b></div>
+    <div class="line"><span>ממוצע יומי</span><b id="avgDaily">₪0</b></div>
+    <div class="line"><span>פער מ-300 ליום</span><b id="monthDelta">—</b></div>
+    <div class="line"><span>ימים שנותרו</span><b id="daysLeft">—</b></div>
+  </div>
+
+  <div class="ledger hidden" id="rateWarning" style="margin-top:10px;"></div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+const DAILY = 300;
+const MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+const DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+
+let fileData = [];
+let manualData = [];
+
+function fmt(n){ const r=Math.round(n); return '₪'+Math.abs(r).toLocaleString('en-US'); }
+
+function parseCSV(text){
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+  const rows=[]; let f='',r=[],q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else{ if(c==='"')q=true; else if(c===','){r.push(f);f='';} else if(c==='\n'){r.push(f);rows.push(r);r=[];f='';} else if(c!=='\r') f+=c; }
+  }
+  if(f.length||r.length){ r.push(f); rows.push(r); }
+  return rows;
+}
+
+function parseDMY(s){ const m=(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m?new Date(+m[3],+m[2]-1,+m[1]):null; }
+
+function ingestCSV(rows){
+  const h=rows[0], idx={}; h.forEach((x,i)=>idx[x.trim()]=i);
+  const now=new Date(), cy=now.getFullYear(), cm=now.getMonth();
+  const out=[];
+  for(let i=1;i<rows.length;i++){
+    const row=rows[i]; if(!row||row.length<h.length) continue;
+    const src=(row[idx['סוג מקור']]||'').trim();
+    if(src!=='creditCard') continue;
+    const ex=(row[idx['האם מוחרג מהתזרים?']]||'').trim();
+    if(ex.toLowerCase()==='true') continue;
+    const amt=parseFloat(row[idx['סכום']]); if(isNaN(amt)||amt>=0) continue;
+    const d=parseDMY(row[idx['תאריך התשלום']]);
+    if(!d||d.getFullYear()!==cy||d.getMonth()!==cm) continue;
+    out.push({name:row[idx['שם העסק']]||'',amt:Math.abs(amt),d:d.getDate()});
+  }
+  fileData=out;
+}
+
+function calc(){
+  const now=new Date(), y=now.getFullYear(), m=now.getMonth(), dom=now.getDate();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+
+  let allToday=fileData.filter(x=>x.d===dom);
+  for(let entry of manualData) allToday.push({name:entry.desc||'הוצאה',amt:entry.amt,manual:true,id:entry.id});
+
+  const spentToday=allToday.reduce((s,x)=>s+x.amt,0);
+  const spentMonth=fileData.reduce((s,x)=>s+x.amt,0)+manualData.reduce((s,x)=>s+x.amt,0);
+  const daysLeft=daysInMonth-dom;
+  
+  const totalBudget=DAILY*daysInMonth;
+  const dynamicCeiling=Math.min(DAILY, daysLeft>0?(totalBudget-spentMonth)/daysLeft:0);
+  
+  const remaining=dynamicCeiling-spentToday;
+  const avg=dom>0?spentMonth/dom:0;
+  const budgetSoFar=DAILY*dom;
+  const delta=budgetSoFar-spentMonth;
+
+  // rate of ceiling decline: based on actual days with recorded data, not calendar day number
+  // this matters if tracking started mid-month rather than day 1
+  const allDayNums = fileData.map(x=>x.d);
+  const firstDataDay = allDayNums.length ? Math.min(...allDayNums) : dom;
+  const elapsedDays = Math.max(1, dom - firstDataDay + 1);
+  const declinePerDay = (DAILY-dynamicCeiling)/elapsedDays;
+  const daysUntilZero = declinePerDay>0 ? Math.floor(dynamicCeiling/declinePerDay) : null;
+
+  return {now,y,m,dom,daysInMonth,remaining,spentToday,spentMonth,allToday,avg,delta,daysLeft,dynamicCeiling,declinePerDay,daysUntilZero,elapsedDays};
+}
+
+function render(){
+  const c=calc();
+  
+  document.getElementById('dateLabel').textContent=`יום ${DAYS[c.now.getDay()]} · ${c.dom} ב${MONTHS[c.m]}`;
+
+  const amt=document.getElementById('remainingToday');
+  amt.textContent=fmt(Math.max(0,Math.round(c.remaining)));
+  amt.className=c.remaining<0?'amount neg':'amount pos';
+  
+  document.getElementById('todaySub').innerHTML=`מתקרה דינמית <b>₪${Math.round(c.dynamicCeiling)}</b> · הוצאת היום <b>${fmt(c.spentToday)}</b>`;
+
+  const list=document.getElementById('todayList');
+  if(c.allToday.length===0) list.innerHTML='<div class="empty">אין הוצאות היום</div>';
+  else list.innerHTML=c.allToday.map(x=>`<div class="entry">${x.manual?`<button class="del" data-id="${x.id}">✕</button>`:'<span></span>'}<span class="amt">-${fmt(x.amt).slice(1)}</span><span class="desc">${x.name}</span></div>`).join('');
+
+  document.getElementById('monthSpent').textContent=fmt(c.spentMonth);
+  
+  const avgEl=document.getElementById('avgDaily');
+  avgEl.textContent=fmt(c.avg);
+  avgEl.parentElement.classList.toggle('over',c.avg>DAILY);
+  
+  const dEl=document.getElementById('monthDelta');
+  dEl.textContent=(c.delta>=0?'+':'')+fmt(c.delta)+' מהקצב המקורי';
+  dEl.classList=c.delta<0?'over':'under';
+  
+  document.getElementById('daysLeft').textContent=c.daysLeft;
+
+  const warnEl=document.getElementById('rateWarning');
+  if(c.dynamicCeiling>=DAILY || c.daysUntilZero===null){
+    warnEl.classList.add('hidden');
+  } else {
+    warnEl.classList.remove('hidden');
+    const urgent = c.daysUntilZero <= c.daysLeft;
+    const msg = urgent
+      ? `התקרה יורדת בכ-₪${Math.round(c.declinePerDay)} ליום. בקצב הזה היא מגיעה ל-0 בעוד כ-${c.daysUntilZero} ימים, לפני שהחודש נגמר`
+      : `התקרה יורדת בכ-₪${Math.round(c.declinePerDay)} ליום. בקצב הזה היא הייתה מגיעה ל-0 בעוד כ-${c.daysUntilZero} ימים, אבל החודש נגמר קודם`;
+    warnEl.innerHTML = `<div class="inv-section"><div class="inv-title">קצב ירידה</div>
+      <div class="inv-row"><span class="val" style="color:${urgent?'var(--rust)':'var(--amber)'}">${c.daysUntilZero} ימים</span>
+      <span class="name">${msg}</span></div></div>`;
+  }
+}
+
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1500); }
+
+function save(){ try{ localStorage.setItem('manualData',JSON.stringify(manualData)); localStorage.setItem('fileData',JSON.stringify(fileData)); }catch(e){} }
+function load(){ try{ const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m); const f=localStorage.getItem('fileData'); if(f) fileData=JSON.parse(f); }catch(e){} }
+
+document.getElementById('fileInput').addEventListener('change',(e)=>{
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader(); r.onload=ev=>{
+    try{
+      ingestCSV(parseCSV(ev.target.result));
+      save();
+      document.getElementById('uploadZone').classList.add('loaded');
+      document.getElementById('uploadBig').textContent='✓ '+file.name;
+      document.getElementById('uploadSmall').textContent='הקש לטעון מחדש';
+      render(); updateInvestigateVisibility();
+      if(!document.getElementById('investigatePanel').classList.contains('hidden')) renderInvestigation();
+      toast('עודכן ✓');
+    }catch(err){ toast('שגיאה בקובץ'); }
+  }; r.readAsText(file,'UTF-8');
+});
+
+document.getElementById('addBtn').addEventListener('click',()=>{
+  const ai=document.getElementById('amountInput'), di=document.getElementById('descInput');
+  const v=parseFloat(ai.value);
+  if(!v||v<=0){ ai.focus(); return; }
+  manualData.push({id:Date.now(),amt:v,desc:di.value.trim()});
+  ai.value=''; di.value='';
+  save(); render(); updateInvestigateVisibility();
+  if(!document.getElementById('investigatePanel').classList.contains('hidden')) renderInvestigation();
+  toast('נוסף ✓');
+});
+
+document.getElementById('clearBtn').addEventListener('click',()=>{
+  if(confirm('למחוק את כל הנתונים? זה לא יהיה אפשר לשחזר.')){
+    manualData=[]; fileData=[]; save(); render(); updateInvestigateVisibility();
+    document.getElementById('investigatePanel').classList.add('hidden');
+    toast('אופס למדי');
+  }
+});
+
+[document.getElementById('amountInput'),document.getElementById('descInput')].forEach(el=>{
+  el.addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('addBtn').click(); });
+});
+
+document.getElementById('todayList').addEventListener('click',e=>{
+  const btn=e.target.closest('.del');
+  if(!btn) return;
+  const id=parseInt(btn.dataset.id);
+  manualData=manualData.filter(x=>x.id!==id);
+  save(); render();
+  if(!document.getElementById('investigatePanel').classList.contains('hidden')) renderInvestigation();
+  toast('נמחק');
+});
+
+function renderInvestigation(){
+  const panel = document.getElementById('investigatePanel');
+
+  // top single expenses (file + manual) this month
+  const all = [
+    ...fileData.map(x=>({name:x.name||'ללא שם', amt:x.amt, day:x.d})),
+    ...manualData.map(x=>({name:x.desc||'הוצאה ידנית', amt:x.amt, day:null}))
+  ];
+
+  if(all.length===0){
+    panel.innerHTML = '<div class="inv-empty">אין עדיין נתונים לחודש הזה</div>';
+    panel.classList.remove('hidden');
+    return;
+  }
+
+  const top = [...all].sort((a,b)=>b.amt-a.amt).slice(0,6);
+
+  // group by normalized name for recurring/accumulating expenses
+  const groups = {};
+  for(const item of all){
+    const key = (item.name||'ללא שם').trim();
+    if(!groups[key]) groups[key] = {name:key, total:0, count:0};
+    groups[key].total += item.amt;
+    groups[key].count += 1;
+  }
+  const grouped = Object.values(groups)
+    .filter(g=>g.count>=2)
+    .sort((a,b)=>b.total-a.total)
+    .slice(0,6);
+
+  let html = '<div class="inv-section"><div class="inv-title">ההוצאות הבודדות הגדולות ביותר</div>';
+  html += top.map(x=>`<div class="inv-row"><span class="val">-${fmt(x.amt).slice(1)}</span><span class="name">${x.name}${x.day?` <span class="count">יום ${x.day}</span>`:''}</span></div>`).join('');
+  html += '</div>';
+
+  html += '<div class="inv-section"><div class="inv-title">הכי מצטבר (חוזר כמה פעמים)</div>';
+  if(grouped.length===0){
+    html += '<div class="inv-empty">אין עדיין הוצאות שחוזרות פעמיים או יותר</div>';
+  } else {
+    html += grouped.map(g=>`<div class="inv-row"><span class="val">-${fmt(g.total).slice(1)}</span><span class="name">${g.name}<span class="count">× ${g.count}</span></span></div>`).join('');
+  }
+  html += '</div>';
+
+  panel.innerHTML = html;
+  panel.classList.remove('hidden');
+}
+
+document.getElementById('investigateBtn').addEventListener('click', ()=>{
+  const panel = document.getElementById('investigatePanel');
+  if(panel.classList.contains('hidden')) renderInvestigation();
+  else panel.classList.add('hidden');
+});
+
+function updateInvestigateVisibility(){
+  const btn = document.getElementById('investigateBtn');
+  if(fileData.length>0 || manualData.length>0) btn.classList.remove('hidden');
+  else btn.classList.add('hidden');
+}
+
+load(); render(); updateInvestigateVisibility();
+</script>
+</body>
+</html>
