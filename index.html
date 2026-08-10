@@ -4,231 +4,207 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>כמה נשאר</title>
-<meta name="theme-color" content="#101315">
+<meta name="theme-color" content="#F4F5F7">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="כמה נשאר">
 <link rel="manifest" href="/manifest.json">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23F4EFE3'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='19' font-weight='600' text-anchor='middle' fill='%232F4F2C'%3E%E2%82%AA%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235B6CF5'/%3E%3Ctext x='16' y='23' font-family='sans-serif' font-size='18' font-weight='700' text-anchor='middle' fill='white'%3E%E2%82%AA%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&family=Frank+Ruhl+Libre:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#101315; --bg-2:#161A1D;
-    --surface:#191E21; --surface-2:#212729; --line:#2C3438; --line-soft:#242B2F;
-    --paper:#F4EFE3; --paper-2:#EAE3D3; --ink:#26221C; --ink-dim:#7C7361;
-    --text:#EDE9DF; --dim:#98A1A6; --dim-2:#6E777C;
-    --amber:#E0A64F; --rust:#CB5B3C; --green:#84A472;
-    --radius:16px;
+    --bg:#F4F5F7;
+    --card:#FFFFFF;
+    --ink:#1B1B2F;
+    --ink-2:#4A5160;
+    --ink-3:#8A91A0;
+    --line:#EDEEF2;
+    --blue:#5B6CF5;
+    --blue-soft:#EEF0FE;
+    --orange:#F4703A;
+    --orange-soft:#FEF0EA;
+    --yellow:#F5C542;
+    --green:#2FA36B;
+    --green-soft:#E9F7F0;
     --safe-b:env(safe-area-inset-bottom, 0px);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; padding:0;}
   body{
-    background:var(--bg); color:var(--text);
-    font-family:'Assistant', sans-serif; font-size:15px; line-height:1.5;
+    background:var(--bg); color:var(--ink);
+    font-family:'Rubik', system-ui, sans-serif; font-size:16px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
     min-height:100vh; display:flex; justify-content:center;
-    padding:0 0 calc(96px + var(--safe-b));
-    /* two soft pools of light so the ground isn't a flat fill */
-    background-image:
-      radial-gradient(120% 60% at 80% -10%, rgba(224,166,79,.09), transparent 60%),
-      radial-gradient(90% 50% at 0% 100%, rgba(132,164,114,.055), transparent 60%);
-    background-attachment:fixed;
+    padding:0 0 calc(104px + var(--safe-b));
   }
-  .app{ width:100%; max-width:460px; padding:0 14px; }
+  .app{ width:100%; max-width:480px; padding:0 16px; }
   .hidden{ display:none !important; }
   button{ font-family:inherit; cursor:pointer; }
+  .num{ font-variant-numeric:tabular-nums; font-feature-settings:'tnum'; direction:ltr; unicode-bidi:isolate; }
 
-  /* staggered entrance */
-  @keyframes riseIn{ from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:none;} }
-  .stagger>*{ animation:riseIn .5s cubic-bezier(.2,.7,.3,1) both; }
-  .stagger>*:nth-child(1){animation-delay:.02s} .stagger>*:nth-child(2){animation-delay:.07s}
-  .stagger>*:nth-child(3){animation-delay:.12s} .stagger>*:nth-child(4){animation-delay:.17s}
-  .stagger>*:nth-child(5){animation-delay:.22s} .stagger>*:nth-child(6){animation-delay:.27s}
+  @keyframes riseIn{ from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:none;} }
+  .stagger>*{ animation:riseIn .45s cubic-bezier(.2,.7,.3,1) both; }
+  .stagger>*:nth-child(2){animation-delay:.05s} .stagger>*:nth-child(3){animation-delay:.1s}
+  .stagger>*:nth-child(4){animation-delay:.15s} .stagger>*:nth-child(5){animation-delay:.2s}
   @media (prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important;} }
 
-  /* ---------- top bar ---------- */
-  .top{ display:flex; align-items:center; gap:10px; padding:16px 2px 14px; }
-  .brand{ font-family:'Frank Ruhl Libre', serif; font-weight:700; font-size:19px; letter-spacing:-.2px; }
-  .brand small{ display:block; font-family:'IBM Plex Mono', monospace; font-weight:400;
-    font-size:10.5px; letter-spacing:.6px; color:var(--dim-2); margin-top:1px; }
-  .top-sp{ flex:1; }
+  /* ---------- header ---------- */
+  .top{ display:flex; align-items:center; gap:10px; padding:18px 2px 16px; }
+  .hello{ flex:1; min-width:0; }
+  .hello .h{ font-size:14px; color:var(--ink-3); font-weight:500; }
+  .hello .d{ font-size:17px; font-weight:700; letter-spacing:-.3px; margin-top:1px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .chip{
-    display:inline-flex; align-items:center; gap:6px; background:var(--surface);
-    border:1px solid var(--line); border-radius:999px; padding:6px 11px 6px 9px;
-    font-size:11.5px; color:var(--dim); max-width:190px; transition:border-color .2s;
+    display:inline-flex; align-items:center; gap:6px; background:var(--card); flex:none;
+    border:none; border-radius:999px; padding:8px 12px; font-size:13.5px; font-weight:500;
+    color:var(--ink-2); box-shadow:0 1px 3px rgba(24,28,50,.08); white-space:nowrap;
   }
-  .chip .dot{ width:6px; height:6px; border-radius:50%; background:var(--dim-2); flex:none; }
-  .chip .txt{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .chip.ok .dot{ background:var(--green); box-shadow:0 0 0 3px rgba(132,164,114,.16); }
-  .chip.busy .dot{ background:var(--amber); animation:pulse 1s ease-in-out infinite; }
-  .chip.err{ border-color:rgba(203,91,60,.5); color:#E8A18B; }
-  .chip.err .dot{ background:var(--rust); }
-  @keyframes pulse{ 50%{opacity:.25;} }
-  .icon-btn{
-    width:36px; height:36px; flex:none; display:grid; place-items:center;
-    background:var(--surface); border:1px solid var(--line); border-radius:11px;
-    color:var(--dim); font-size:15px; transition:transform .15s, color .2s;
-  }
-  .icon-btn:active{ transform:scale(.92); color:var(--text); }
-
-  /* ---------- receipt hero ---------- */
-  .receipt-wrap{ filter:drop-shadow(0 18px 34px rgba(0,0,0,.5)); margin-bottom:18px; }
-  .receipt{
-    background:var(--paper); color:var(--ink); padding:24px 22px 20px; text-align:center;
-    position:relative; overflow:hidden;
-    /* torn top + bottom edge, cut straight out of the paper */
-    -webkit-mask:
-      radial-gradient(circle at 7px 7px, transparent 6.5px, #000 7px) -7px 0/14px 14px repeat-x,
-      radial-gradient(circle at 7px 7px, transparent 6.5px, #000 7px) -7px 100%/14px 14px repeat-x,
-      linear-gradient(#000,#000) 0 7px/100% calc(100% - 14px) no-repeat;
-    mask:
-      radial-gradient(circle at 7px 7px, transparent 6.5px, #000 7px) -7px 0/14px 14px repeat-x,
-      radial-gradient(circle at 7px 7px, transparent 6.5px, #000 7px) -7px 100%/14px 14px repeat-x,
-      linear-gradient(#000,#000) 0 7px/100% calc(100% - 14px) no-repeat;
-  }
-  /* paper grain */
-  .receipt::before{
-    content:''; position:absolute; inset:0; pointer-events:none; opacity:.5;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E");
-  }
-  .receipt>*{ position:relative; }
-  .r-label{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:2px;
-    text-transform:uppercase; color:var(--ink-dim); }
-  .r-amount{
-    font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:clamp(52px, 17vw, 68px);
-    line-height:1; letter-spacing:-2px; direction:ltr; margin:10px 0 4px; color:#2F4F2C;
-  }
-  .r-amount.neg{ color:var(--rust); }
-  .r-of{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-dim); direction:ltr; }
-
-  .meter{ height:5px; border-radius:3px; background:rgba(38,34,28,.12); margin:16px 0 12px; overflow:hidden; }
-  .meter i{ display:block; height:100%; width:0; border-radius:3px; background:#4A6B45;
-    transition:width .7s cubic-bezier(.2,.7,.3,1), background-color .3s; }
-  .meter.over i{ background:var(--rust); }
-
-  .r-split{ display:flex; border-top:1px dashed rgba(38,34,28,.22); padding-top:12px; }
-  .r-split div{ flex:1; }
-  .r-split div+div{ border-inline-start:1px dashed rgba(38,34,28,.22); }
-  .r-split .k{ font-size:11px; color:var(--ink-dim); margin-bottom:3px; }
-  .r-split .v{ font-family:'IBM Plex Mono', monospace; font-size:15px; font-weight:500; direction:ltr; }
+  .chip .dot{ width:8px; height:8px; border-radius:50%; background:var(--ink-3); flex:none; }
+  .chip.ok .dot{ background:var(--green); }
+  .chip.busy .dot{ background:var(--yellow); animation:blink 1s ease-in-out infinite; }
+  .chip.err{ color:var(--orange); } .chip.err .dot{ background:var(--orange); }
+  @keyframes blink{ 50%{opacity:.3;} }
+  .gear{ width:40px; height:40px; flex:none; display:grid; place-items:center; background:var(--card);
+    border:none; border-radius:14px; box-shadow:0 1px 3px rgba(24,28,50,.08); transition:transform .15s; }
+  .gear:active{ transform:scale(.93); }
+  .gear svg{ width:21px; height:21px; fill:var(--ink-2); }
 
   /* ---------- cards ---------- */
-  .card{ background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--radius); }
-  .sec{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:1.4px;
-    text-transform:uppercase; color:var(--dim-2); margin:22px 6px 9px; display:flex;
-    align-items:center; justify-content:space-between; gap:8px; }
-  .sec button{ background:none; border:none; color:var(--amber); font-family:'Assistant',sans-serif;
-    font-size:12px; letter-spacing:0; text-transform:none; padding:2px 0; }
+  .card{ background:var(--card); border-radius:20px; padding:20px; margin-bottom:12px;
+    box-shadow:0 1px 3px rgba(24,28,50,.07), 0 10px 28px -20px rgba(24,28,50,.5); }
+  .card-t{ font-size:19px; font-weight:700; letter-spacing:-.3px; margin:0 0 2px; }
+  .card-s{ font-size:15px; color:var(--ink-3); margin:0; }
 
-  /* ledger */
-  .entry{ display:flex; align-items:center; gap:12px; padding:13px 15px; border-bottom:1px dashed var(--line-soft); }
-  .entry:last-child{ border-bottom:none; }
-  .entry .desc{ flex:1; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .entry .amt{ font-family:'IBM Plex Mono', monospace; font-size:14.5px; color:#E2937C; direction:ltr; }
-  .entry .del{ background:none; border:none; color:var(--dim-2); font-size:16px; line-height:1;
-    padding:2px 4px; transition:color .2s; }
-  .entry .del:active{ color:var(--rust); }
-  .empty{ padding:26px 16px; text-align:center; color:var(--dim-2); font-size:13.5px; }
+  /* hero */
+  .hero .q{ font-size:19px; font-weight:700; letter-spacing:-.3px; margin-bottom:14px; }
+  .hero .big{ font-size:clamp(46px, 14vw, 58px); font-weight:700; line-height:1.05;
+    letter-spacing:-2px; color:var(--green); }
+  .hero .big.over{ color:var(--orange); }
+  .bar{ height:12px; border-radius:99px; background:#F0F1F5; overflow:hidden; margin:18px 0 12px; }
+  .bar i{ display:block; height:100%; border-radius:99px; background:var(--yellow); width:0;
+    transition:width .7s cubic-bezier(.2,.7,.3,1), background-color .3s; }
+  .bar.over i{ background:var(--orange); }
+  .hero .legend{ display:flex; justify-content:space-between; font-size:15px; color:var(--ink-2); }
+  .hero .legend b{ font-weight:600; color:var(--ink); }
 
-  /* stat tiles */
-  .tiles{ display:grid; grid-template-columns:1fr 1fr; gap:9px; }
-  .tile{ background:var(--surface); border:1px solid var(--line-soft); border-radius:13px; padding:13px 14px; }
-  .tile .k{ font-size:11.5px; color:var(--dim-2); margin-bottom:5px; }
-  .tile .v{ font-family:'IBM Plex Mono', monospace; font-size:19px; font-weight:500; direction:ltr; letter-spacing:-.5px; }
-  .tile .v.over{ color:var(--rust); } .tile .v.under{ color:var(--green); }
-  .tile .n{ font-size:11px; color:var(--dim-2); margin-top:3px; }
+  /* rows */
+  .row{ display:flex; align-items:center; gap:12px; padding:15px 0; border-bottom:1px solid var(--line); }
+  .row:last-child{ border-bottom:none; }
+  .row:first-of-type{ padding-top:4px; }
+  .row .lbl{ flex:1; font-size:16px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .lbl b{ color:var(--ink); font-weight:500; }
+  .row .val{ font-size:17px; font-weight:600; }
+  .row .val.neg{ color:var(--orange); } .row .val.pos{ color:var(--green); }
+  .row .sub{ display:block; font-size:13.5px; color:var(--ink-3); font-weight:400; margin-top:1px; }
+  .row .del{ width:30px; height:30px; flex:none; border:none; border-radius:50%; background:var(--bg);
+    color:var(--ink-3); font-size:15px; line-height:1; display:grid; place-items:center; }
+  .row .del:active{ background:var(--orange-soft); color:var(--orange); }
 
-  .note{ display:flex; gap:11px; align-items:flex-start; padding:13px 15px; margin-top:10px;
-    background:rgba(224,166,79,.07); border:1px solid rgba(224,166,79,.28); border-radius:13px;
-    font-size:13px; color:#E7CDA0; line-height:1.55; }
-  .note.hot{ background:rgba(203,91,60,.08); border-color:rgba(203,91,60,.35); color:#EFB49E; }
-  .note .ic{ font-size:15px; line-height:1.3; }
+  .blank{ text-align:center; padding:10px 0 4px; }
+  .blank .t{ font-size:16px; color:var(--ink-2); }
+  .blank .n{ font-size:14px; color:var(--ink-3); margin-top:7px; line-height:1.6; }
+
+  .banner{ display:flex; gap:11px; align-items:flex-start; border-radius:16px; padding:15px 16px;
+    font-size:15px; line-height:1.6; margin-bottom:12px; }
+  .banner.warn{ background:var(--orange-soft); color:#A8431B; }
+  .banner .ic{ flex:none; width:22px; height:22px; border-radius:50%; background:var(--orange);
+    color:#fff; font-size:15px; font-weight:700; line-height:22px; text-align:center; }
+
+  .linkbtn{ background:none; border:none; color:var(--blue); font-size:15px; font-weight:600;
+    padding:14px 0 0; width:100%; text-align:center; }
+  .head-line{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:12px; }
 
   /* onboarding */
-  .onboard{ background:linear-gradient(160deg, rgba(224,166,79,.14), rgba(224,166,79,.04));
-    border:1px solid rgba(224,166,79,.3); border-radius:var(--radius); padding:16px; margin-bottom:16px; }
-  .onboard h2{ margin:0 0 6px; font-family:'Frank Ruhl Libre',serif; font-size:17px; font-weight:700; }
-  .onboard p{ margin:0 0 13px; font-size:13.5px; color:var(--dim); line-height:1.6; }
+  .onboard{ background:linear-gradient(150deg,#6E7BF7,#5B6CF5); color:#fff; }
+  .onboard .card-t{ color:#fff; } .onboard .card-s{ color:rgba(255,255,255,.85); }
+  .onboard .btn{ background:#fff; color:var(--blue); margin-top:16px; }
 
-  /* buttons */
-  .btn{ display:block; width:100%; border:none; border-radius:12px; padding:14px;
-    font-size:15px; font-weight:600; transition:transform .12s, filter .2s; }
+  .btn{ display:block; width:100%; border:none; border-radius:14px; padding:16px;
+    font-size:16px; font-weight:600; transition:transform .12s; }
   .btn:active{ transform:scale(.985); }
-  .btn-primary{ background:linear-gradient(180deg, #EBB35C, var(--amber)); color:#241704;
-    box-shadow:0 6px 18px -8px rgba(224,166,79,.7); }
-  .btn-ghost{ background:var(--surface-2); border:1px solid var(--line); color:var(--text); font-weight:500; }
-  .btn-quiet{ background:none; border:1px solid var(--line); color:var(--dim); font-size:13.5px;
-    font-weight:500; padding:11px; }
-  .btn-danger{ background:none; border:1px solid rgba(203,91,60,.4); color:#DD8B72; font-size:13.5px;
-    font-weight:500; padding:11px; }
+  .btn-primary{ background:var(--blue); color:#fff; }
+  .btn-ghost{ background:var(--bg); color:var(--ink); }
+  .btn-danger{ background:var(--orange-soft); color:#C0491D; }
 
-  /* ---------- add bar (fixed) ---------- */
-  .addbar{
-    position:fixed; bottom:0; left:0; right:0; z-index:60;
-    padding:10px 14px calc(10px + var(--safe-b));
-    background:linear-gradient(to top, var(--bg) 62%, rgba(16,19,21,0));
-  }
-  .addbar-inner{ max-width:460px; margin:0 auto; display:flex; gap:8px; align-items:center;
-    background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:7px;
-    box-shadow:0 12px 30px -12px rgba(0,0,0,.8); }
-  .addbar input{ background:none; border:none; color:var(--text); font-family:'Assistant',sans-serif;
-    font-size:15px; padding:9px 8px; min-width:0; }
-  .addbar input:focus{ outline:none; }
-  .addbar .amt{ font-family:'IBM Plex Mono', monospace; direction:ltr; text-align:center; width:82px;
-    flex:none; background:var(--surface-2); border-radius:10px; font-size:16px; }
-  .addbar .what{ flex:1; }
-  .addbar input::placeholder{ color:var(--dim-2); }
-  .addbar .go{ flex:none; width:44px; height:40px; border:none; border-radius:11px;
-    background:var(--amber); color:#241704; font-size:20px; font-weight:600; line-height:1;
-    display:grid; place-items:center; transition:transform .12s, opacity .2s; }
-  .addbar .go:active{ transform:scale(.92); }
-  .addbar .go:disabled{ opacity:.4; }
+  /* ---------- add bar ---------- */
+  .addbar{ position:fixed; bottom:0; left:0; right:0; z-index:60;
+    padding:12px 16px calc(12px + var(--safe-b));
+    background:linear-gradient(to top, var(--bg) 65%, rgba(244,245,247,0)); }
+  .addbar-inner{ max-width:480px; margin:0 auto; }
+  .addbig{ display:flex; align-items:center; justify-content:center; gap:10px; width:100%;
+    border:none; border-radius:18px; background:var(--blue); color:#fff; padding:17px;
+    font-size:17px; font-weight:600; box-shadow:0 8px 22px -8px rgba(91,108,245,.8);
+    transition:transform .12s; }
+  .addbig:active{ transform:scale(.985); }
+  .addbig .plus{ font-size:22px; font-weight:500; line-height:1; }
 
-  /* ---------- settings sheet ---------- */
-  .scrim{ position:fixed; inset:0; background:rgba(8,10,11,.72); backdrop-filter:blur(3px);
-    z-index:80; opacity:0; pointer-events:none; transition:opacity .25s; }
+  /* ---------- keypad ---------- */
+  .pad{ padding-bottom:calc(18px + var(--safe-b)); }
+  .pad-amt{ font-size:46px; font-weight:700; letter-spacing:-1.5px; text-align:center;
+    line-height:1.1; color:var(--ink); }
+  .pad-amt.zero{ color:#C3C7D2; }
+  .pad-left{ text-align:center; font-size:15px; color:var(--ink-2); margin-top:6px; min-height:23px; }
+  .pad-left b{ font-weight:600; }
+  .pad-left.over b{ color:var(--orange); }
+  .pad-desc{ width:100%; background:var(--card); border:1.5px solid transparent; border-radius:14px;
+    padding:14px; font-size:16px; font-family:inherit; color:var(--ink); margin:16px 0 12px;
+    box-shadow:0 1px 3px rgba(24,28,50,.07); }
+  .pad-desc:focus{ outline:none; border-color:var(--blue); }
+  .quick{ display:flex; gap:8px; margin-bottom:12px; }
+  .quick button{ flex:1; background:var(--card); border:none; border-radius:12px; padding:11px 4px;
+    font-size:15px; font-weight:600; color:var(--blue); font-variant-numeric:tabular-nums;
+    box-shadow:0 1px 3px rgba(24,28,50,.07); }
+  .quick button:active{ background:var(--blue-soft); }
+  /* LTR so 1 sits top-left like every calculator, even though the page is RTL */
+  .keys{ display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-bottom:14px; direction:ltr; }
+  .keys button{ background:var(--card); border:none; border-radius:14px; height:58px;
+    font-size:24px; font-weight:500; color:var(--ink); font-variant-numeric:tabular-nums;
+    box-shadow:0 1px 3px rgba(24,28,50,.07); transition:transform .08s, background-color .12s; }
+  .keys button:active{ transform:scale(.95); background:var(--blue-soft); }
+  .keys button.util{ font-size:20px; color:var(--ink-2); }
+
+  /* ---------- sheet ---------- */
+  .scrim{ position:fixed; inset:0; background:rgba(20,22,36,.45); z-index:80;
+    opacity:0; pointer-events:none; transition:opacity .25s; }
   .scrim.open{ opacity:1; pointer-events:auto; }
-  .sheet{
-    position:fixed; z-index:90; left:0; right:0; bottom:0; max-height:88vh; overflow-y:auto;
-    background:var(--bg-2); border-top:1px solid var(--line);
-    border-radius:22px 22px 0 0; padding:8px 16px calc(24px + var(--safe-b));
+  .sheet{ position:fixed; z-index:90; left:0; right:0; bottom:0; max-height:90vh; overflow-y:auto;
+    background:var(--bg); border-radius:26px 26px 0 0; padding:8px 18px calc(26px + var(--safe-b));
     transform:translateY(100%); transition:transform .3s cubic-bezier(.2,.7,.3,1);
-    max-width:460px; margin:0 auto;
-  }
+    max-width:480px; margin:0 auto; }
   .sheet.open{ transform:none; }
-  .grab{ width:38px; height:4px; border-radius:2px; background:var(--line); margin:6px auto 14px; }
-  .sheet h3{ margin:0 0 4px; font-family:'Frank Ruhl Libre',serif; font-size:18px; }
-  .sheet .lead{ margin:0 0 16px; font-size:13px; color:var(--dim); line-height:1.6; }
-  .field{ margin-bottom:12px; }
-  .field label{ display:block; font-size:12.5px; color:var(--dim); margin-bottom:6px; }
-  .field input{ width:100%; background:var(--surface); border:1px solid var(--line); color:var(--text);
-    border-radius:11px; padding:13px; font-size:15px; font-family:'Assistant',sans-serif; }
-  .field input:focus{ outline:none; border-color:var(--amber); }
-  .field .hint{ font-size:11.5px; color:var(--dim-2); margin-top:6px; line-height:1.55; }
-  .field .hint a{ color:var(--amber); }
-  .steps{ counter-reset:s; margin:0 0 16px; padding:0; list-style:none; }
-  .steps li{ counter-increment:s; position:relative; padding-inline-start:28px; margin-bottom:9px;
-    font-size:13.5px; color:var(--dim); line-height:1.55; }
-  .steps li::before{ content:counter(s); position:absolute; inset-inline-start:0; top:1px;
-    width:19px; height:19px; border-radius:50%; background:var(--surface-2); color:var(--amber);
-    font-family:'IBM Plex Mono',monospace; font-size:11px; display:grid; place-items:center; }
-  .steps b{ color:var(--text); font-weight:600; }
-  .adv{ border-top:1px solid var(--line-soft); margin-top:18px; padding-top:14px; }
-  .adv summary{ font-size:13px; color:var(--dim-2); cursor:pointer; list-style:none; padding:4px 0; }
-  .adv summary::-webkit-details-marker{ display:none; }
-  .adv summary::before{ content:'▸ '; }
-  .adv[open] summary::before{ content:'▾ '; }
-  .adv .body{ padding-top:14px; }
-  .filebtn{ display:block; text-align:center; }
+  .grab{ width:42px; height:5px; border-radius:3px; background:#DDDFE6; margin:6px auto 18px; }
+  .sheet h3{ margin:0 0 6px; font-size:22px; font-weight:700; letter-spacing:-.4px; }
+  .sheet .lead{ margin:0 0 18px; font-size:15px; color:var(--ink-2); line-height:1.6; }
+  .steps{ counter-reset:s; margin:0 0 18px; padding:0; list-style:none; }
+  .steps li{ counter-increment:s; position:relative; padding-inline-start:34px; margin-bottom:12px;
+    font-size:15px; color:var(--ink-2); line-height:1.6; }
+  .steps li::before{ content:counter(s); position:absolute; inset-inline-start:0; top:0;
+    width:24px; height:24px; border-radius:50%; background:var(--blue-soft); color:var(--blue);
+    font-size:13px; font-weight:600; display:grid; place-items:center; }
+  .steps b{ color:var(--ink); font-weight:600; }
+  .steps a{ color:var(--blue); font-weight:600; }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:15px; font-weight:500; margin-bottom:8px; }
+  .field input{ width:100%; background:var(--card); border:1.5px solid transparent; color:var(--ink);
+    border-radius:14px; padding:15px; font-size:16px; font-family:inherit;
+    box-shadow:0 1px 3px rgba(24,28,50,.07); }
+  .field input:focus{ outline:none; border-color:var(--blue); }
+  .field .hint{ font-size:14px; color:var(--ink-3); margin-top:8px; line-height:1.6; }
+  .stack{ display:flex; flex-direction:column; gap:10px; }
+  details.adv{ margin-top:22px; border-top:1px solid #E4E6EC; padding-top:16px; }
+  details.adv summary{ font-size:15px; color:var(--ink-2); font-weight:500; list-style:none; padding:6px 0; }
+  details.adv summary::-webkit-details-marker{ display:none; }
+  details.adv summary::before{ content:'▸ '; color:var(--ink-3); }
+  details.adv[open] summary::before{ content:'▾ '; }
+  details.adv .body{ padding-top:16px; }
+  .filebtn{ text-align:center; }
   input[type=file]{ display:none; }
-  .stack{ display:flex; flex-direction:column; gap:9px; }
 
-  .toast{ position:fixed; bottom:calc(84px + var(--safe-b)); left:50%; transform:translateX(-50%) translateY(8px);
-    background:var(--surface-2); border:1px solid var(--line); color:var(--text); padding:10px 18px;
-    border-radius:999px; font-size:13px; opacity:0; transition:opacity .25s, transform .25s;
-    pointer-events:none; z-index:200; box-shadow:0 10px 24px -12px #000; }
+  .toast{ position:fixed; bottom:calc(96px + var(--safe-b)); left:50%; transform:translateX(-50%) translateY(8px);
+    background:var(--ink); color:#fff; padding:12px 20px; border-radius:999px; font-size:15px;
+    opacity:0; transition:opacity .25s, transform .25s; pointer-events:none; z-index:200; }
   .toast.show{ opacity:1; transform:translateX(-50%); }
 </style>
 </head>
@@ -237,78 +213,103 @@
 <div class="app stagger">
 
   <div class="top">
-    <div class="brand">כמה נשאר<small id="dateLabel">— — —</small></div>
-    <div class="top-sp"></div>
-    <button class="chip" id="statusChip" aria-live="polite"><span class="dot"></span><span class="txt" id="statusText">לא מחובר</span></button>
-    <button class="icon-btn" id="openSettings" aria-label="הגדרות">⚙</button>
+    <div class="hello">
+      <div class="h">היי</div>
+      <div class="d" id="dateLabel">— — —</div>
+    </div>
+    <button class="chip" id="statusChip" aria-live="polite"><span class="dot"></span><span id="statusText">לא מחובר</span></button>
+    <button class="gear" id="openSettings" aria-label="הגדרות">
+      <svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 1 15.5 12 3.5 3.5 0 0 1 12 15.5m7.43-2.53a7.7 7.7 0 0 0 0-1.94l2.03-1.58a.5.5 0 0 0 .12-.62l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.68-.97l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.6.25-1.16.58-1.68.97l-2.39-.96a.5.5 0 0 0-.6.22L2.42 8.83a.5.5 0 0 0 .12.62l2.03 1.58a7.7 7.7 0 0 0 0 1.94l-2.03 1.58a.5.5 0 0 0-.12.62l1.92 3.32c.13.22.38.3.6.22l2.39-.96c.52.39 1.08.72 1.68.97l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.6-.25 1.16-.58 1.68-.97l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.62Z"/></svg>
+    </button>
   </div>
 
-  <div class="onboard hidden" id="onboard">
-    <h2>חבר את RiseUp</h2>
-    <p>במקום לטעון קובץ כל חודש, האפליקציה תמשוך את חיובי האשראי שלך לבד — בכל פעם שתפתח אותה.</p>
-    <button class="btn btn-primary" id="onboardBtn">מתחילים</button>
+  <div class="card onboard hidden" id="onboard">
+    <div class="card-t">מחברים את רייזאפ</div>
+    <p class="card-s">במקום לטעון קובץ כל חודש, האפליקציה תמשוך את חיובי האשראי שלך לבד — בכל פעם שתפתח אותה.</p>
+    <button class="btn" id="onboardBtn">מתחילים</button>
   </div>
 
-  <div class="receipt-wrap">
-    <div class="receipt">
-      <div class="r-label">נשאר להיום</div>
-      <div class="r-amount" id="remainingToday">₪300</div>
-      <div class="r-of" id="ceilingLine">מתוך ₪300</div>
-      <div class="meter" id="meter"><i></i></div>
-      <div class="r-split">
-        <div><div class="k">הוצאת היום</div><div class="v" id="spentToday">₪0</div></div>
-        <div><div class="k">החודש</div><div class="v" id="monthSpent">₪0</div></div>
-        <div><div class="k">ימים שנותרו</div><div class="v" id="daysLeft">—</div></div>
-      </div>
+  <div class="card hero">
+    <div class="q">כמה נשאר להיום?</div>
+    <div class="big num" id="remainingToday">₪300</div>
+    <div class="bar" id="bar"><i></i></div>
+    <div class="legend">
+      <span>יצא היום <b class="num" id="spentToday">₪0</b></span>
+      <span>מתוך <b class="num" id="ceilingVal">₪300</b></span>
     </div>
   </div>
 
-  <div>
-    <div class="sec">הוצאות היום</div>
-    <div class="card" id="todayList"><div class="empty">עוד לא יצא כסף היום</div></div>
+  <div class="banner hidden" id="rateWarning"></div>
+
+  <div class="card">
+    <div class="head-line"><div class="card-t">ההוצאות של היום</div></div>
+    <div id="todayList"></div>
   </div>
 
-  <div>
-    <div class="sec">החודש<button id="investigateBtn" class="hidden">תחקיר ›</button></div>
-    <div class="tiles">
-      <div class="tile"><div class="k">ממוצע יומי</div><div class="v" id="avgDaily">₪0</div><div class="n" id="avgNote">מול ₪300 ליום</div></div>
-      <div class="tile"><div class="k">מול הקצב</div><div class="v" id="monthDelta">—</div><div class="n" id="deltaNote">מתחילת החודש</div></div>
+  <div class="card">
+    <div class="head-line">
+      <div class="card-t">החודש</div>
+      <button class="linkbtn hidden" id="investigateBtn" style="width:auto; padding:0">לאן זה הלך ›</button>
     </div>
-    <div class="card hidden" id="investigatePanel" style="margin-top:9px;"></div>
-    <div class="note hidden" id="rateWarning"></div>
+    <div class="row"><span class="lbl">יצא בכרטיסי אשראי</span><span class="val num" id="monthSpent">₪0</span></div>
+    <div class="row"><span class="lbl">ממוצע ליום<span class="sub" id="avgNote">היעד הוא ₪300</span></span><span class="val num" id="avgDaily">₪0</span></div>
+    <div class="row"><span class="lbl">מול הקצב<span class="sub" id="deltaNote">מתחילת החודש</span></span><span class="val num" id="monthDelta">—</span></div>
+    <div class="row"><span class="lbl">ימים שנותרו בחודש</span><span class="val num" id="daysLeft">—</span></div>
+    <div id="investigatePanel" class="hidden"></div>
   </div>
 
 </div>
 
 <div class="addbar">
   <div class="addbar-inner">
-    <input class="amt" type="number" id="amountInput" placeholder="₪" inputmode="decimal" step="0.01">
-    <input class="what" type="text" id="descInput" placeholder="הוצאה במזומן — על מה?">
-    <button class="go" id="addBtn" aria-label="הוסף">+</button>
+    <button class="addbig" id="openPad"><span class="plus">+</span><span>הוספת הוצאה</span></button>
   </div>
+</div>
+
+<div class="scrim" id="padScrim"></div>
+<div class="sheet pad" id="padSheet" role="dialog" aria-label="הוספת הוצאה">
+  <div class="grab"></div>
+  <div class="pad-amt zero num" id="padAmt">₪0</div>
+  <div class="pad-left" id="padLeft"></div>
+  <input class="pad-desc" id="padDesc" placeholder="על מה? (לא חובה)" autocomplete="off">
+  <div class="quick">
+    <button data-q="10">10+</button>
+    <button data-q="20">20+</button>
+    <button data-q="50">50+</button>
+    <button data-q="100">100+</button>
+  </div>
+  <div class="keys" id="keys">
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+    <button data-k="." class="util">.</button><button data-k="0">0</button>
+    <button data-k="del" class="util" aria-label="מחיקה">⌫</button>
+  </div>
+  <button class="btn btn-primary" id="padSave">הוספה</button>
+  <button class="btn btn-ghost" id="padCancel" style="margin-top:9px">ביטול</button>
 </div>
 
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-label="הגדרות">
   <div class="grab"></div>
-  <h3>חיבור ל-RiseUp</h3>
+  <h3>חיבור לרייזאפ</h3>
   <p class="lead" id="sheetStatus">האפליקציה מושכת את חיובי האשראי של החודש ישירות מהתזרים שלך.</p>
 
   <ol class="steps">
-    <li>פותחים את <a href="https://input.riseup.co.il/developer/tokens" target="_blank" rel="noopener" style="color:var(--amber)">עמוד הטוקנים של RiseUp</a></li>
+    <li>פותחים את <a href="https://input.riseup.co.il/developer/tokens" target="_blank" rel="noopener">עמוד הטוקנים ברייזאפ</a></li>
     <li>יוצרים טוקן עם ההרשאה <b>budget:read</b></li>
     <li>מדביקים אותו כאן — הוא מוצג פעם אחת בלבד</li>
   </ol>
 
   <div class="field">
-    <label for="tokenInput">טוקן אישי</label>
+    <label for="tokenInput">הטוקן שלך</label>
     <input type="password" id="tokenInput" placeholder="riseup_pat_…" autocomplete="off" spellcheck="false" dir="ltr">
-    <div class="hint">נשמר רק במכשיר הזה. הטוקן פג אחרי 30 יום — אז פשוט צור חדש והדבק שוב.</div>
+    <div class="hint">נשמר רק במכשיר הזה. הטוקן פג אחרי 30 יום — אז פשוט יוצרים חדש ומדביקים שוב.</div>
   </div>
 
   <div class="stack">
     <button class="btn btn-primary" id="saveCfgBtn">שמור וסנכרן</button>
-    <button class="btn btn-ghost" id="syncBtn">משוך נתונים עכשיו</button>
+    <button class="btn btn-ghost" id="syncBtn">רענן עכשיו</button>
   </div>
 
   <details class="adv">
@@ -317,12 +318,12 @@
       <div class="field">
         <label for="baseInput">כתובת שרת</label>
         <input type="text" id="baseInput" placeholder="ברירת מחדל — השרת של האפליקציה" autocomplete="off" spellcheck="false" dir="ltr">
-        <div class="hint">ריק = דרך השרת שמגיש את הדף (מומלץ). שנה רק אם אתה מפנה לפרוקסי אחר.</div>
+        <div class="hint">ריק = דרך השרת שמגיש את הדף. זו ההגדרה הנכונה כמעט תמיד.</div>
       </div>
       <div class="stack">
-        <label class="btn btn-quiet filebtn" for="fileInput" id="fileLabel">טען קובץ CSV במקום</label>
+        <label class="btn btn-ghost filebtn" for="fileInput">טעינת קובץ CSV במקום</label>
         <input type="file" id="fileInput" accept=".csv,text/csv">
-        <button class="btn btn-danger" id="clearBtn">מחק הכל והתחל חודש חדש</button>
+        <button class="btn btn-danger" id="clearBtn">מחיקת הכל והתחלת חודש חדש</button>
       </div>
     </div>
   </details>
@@ -334,7 +335,6 @@
 const DAILY = 300;
 const MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
-const TOKENS_URL = 'https://input.riseup.co.il/developer/tokens';
 
 let fileData = [];
 let manualData = [];
@@ -343,6 +343,7 @@ let lastSync = null;
 
 const $ = id => document.getElementById(id);
 function fmt(n){ return '₪'+Math.abs(Math.round(n)).toLocaleString('en-US'); }
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 /* ---------------- storage ---------------- */
 function save(){ try{
@@ -353,12 +354,16 @@ function save(){ try{
 }catch(e){} }
 function load(){ try{
   const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m);
+  // Entries used to carry no date and were all counted as "today", forever. Stamp
+  // the old ones with today so they keep behaving as they did until they age out.
+  const n=new Date(), ym=ymNow();
+  manualData=manualData.map(e=>e.ym?e:Object.assign({ym,d:n.getDate()},e));
   const f=localStorage.getItem('fileData'); if(f) fileData=JSON.parse(f);
   const c=localStorage.getItem('apiCfg'); if(c) apiCfg=Object.assign({token:'',base:''},JSON.parse(c));
   const s=localStorage.getItem('lastSync'); if(s) lastSync=parseInt(s,10)||null;
 }catch(e){} }
 
-/* ---------------- CSV (fallback path) ---------------- */
+/* ---------------- CSV (fallback) ---------------- */
 function parseCSV(text){
   if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
   const rows=[]; let f='',r=[],q=false;
@@ -388,9 +393,9 @@ function ingestCSV(rows){
 }
 
 /* ---------------- RiseUp API ---------------- */
-// Default path is same-origin (/api/riseup/…), relayed by server.js. The API itself
-// sends no CORS headers, so a direct browser call to input.riseup.co.il dies in
-// preflight — the relay is what makes this work from a page at all.
+// Default path is same-origin (/api/riseup/…), relayed by server.js. RiseUp's API
+// sends no CORS headers, so a direct browser call dies in preflight — the relay is
+// what makes this work from a page at all.
 function ymNow(){ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); }
 
 function mapApiTransactions(list){
@@ -412,12 +417,28 @@ function mapApiTransactions(list){
   return out;
 }
 
+// A card purchase typed in by hand today shows up in RiseUp a day or two later. Without
+// this it would then be counted twice — once as the manual entry, once as the synced
+// charge. Each synced charge can retire at most one manual entry of the same day and
+// amount, so two genuinely separate ₪50 buys on the same day don't collapse into one.
+function dropConfirmedManual(){
+  const claimed=new Set();
+  const kept=[];
+  let dropped=0;
+  for(const e of manualData){
+    const i=fileData.findIndex((t,idx)=>!claimed.has(idx) && t.d===e.d && Math.abs(t.amt-e.amt)<0.5);
+    if(i>=0 && e.ym===ymNow()){ claimed.add(i); dropped++; }
+    else kept.push(e);
+  }
+  manualData=kept;
+  return dropped;
+}
+
 function endpoint(){
   const base=(apiCfg.base||'').replace(/\/+$/,'');
-  if(!base) return '/api/riseup/transactions';                  // same origin, via server.js
-  if(/riseup\.co\.il$/i.test(new URL(base).hostname))            // pointed straight at RiseUp
-    return base+'/api/external/transactions';
-  return base+'/api/riseup/transactions';                        // some other relay
+  if(!base) return '/api/riseup/transactions';
+  if(/riseup\.co\.il$/i.test(new URL(base).hostname)) return base+'/api/external/transactions';
+  return base+'/api/riseup/transactions';
 }
 
 async function syncFromApi(silent){
@@ -429,48 +450,44 @@ async function syncFromApi(silent){
 
     if(res.status===401){
       const b=await res.json().catch(()=>({}));
-      const e=new Error(b.error==='missing_token' ? 'צריך להדביק טוקן בהגדרות' : 'הטוקן פג או בוטל — צור חדש');
-      e.noToken = b.error==='missing_token';
+      const e=new Error(b.error==='missing_token'?'צריך להדביק טוקן בהגדרות':'הטוקן פג או בוטל — צריך ליצור חדש');
+      e.noToken=b.error==='missing_token';
       throw e;
     }
     if(res.status===403) throw new Error('לטוקן חסרה ההרשאה budget:read');
-    if(res.status===429) throw new Error('יותר מדי בקשות — נסה שוב בעוד דקה');
-    if(res.status===502) throw new Error('RiseUp לא זמין כרגע');
+    if(res.status===429) throw new Error('יותר מדי בקשות — כדאי לנסות שוב בעוד דקה');
+    if(res.status===502) throw new Error('רייזאפ לא זמין כרגע');
     if(!res.ok) throw new Error('שגיאת שרת '+res.status);
 
     const data=await res.json();
     fileData=mapApiTransactions(data && data.transactions);
+    const merged=dropConfirmedManual();
     lastSync=Date.now();
     save(); render(true);
-    if(!silent) toast('סונכרן ✓');
+    if(!silent) toast(merged?`עודכן · ${merged} הוצאות כבר נקלטו ברייזאפ`:'הנתונים עודכנו');
   }catch(err){
-    // fetch() rejects with TypeError for both a CORS block and being offline —
-    // the browser deliberately hides which, so the wording has to cover both.
-    const msg = (err instanceof TypeError) ? 'אין חיבור לשרת' : err.message;
+    // fetch() rejects with TypeError for both a CORS block and being offline — the
+    // browser deliberately hides which, so the wording has to cover both.
+    const msg=(err instanceof TypeError)?'אין חיבור לשרת':err.message;
     // On a first visit the boot sync fires before any token exists. That's the
     // expected state, not a failure — the onboarding card already says what to do.
     if(err.noToken && !configured() && !lastSync){ setStatus('','לא מחובר'); return; }
     setStatus('err',msg);
-    $('sheetStatus').textContent = msg + '. ' + (msg.includes('טוקן') ? 'צור טוקן חדש והדבק אותו למטה.' : 'נסה שוב בעוד רגע.');
-    if(!silent) toast('הסנכרון נכשל');
+    $('sheetStatus').textContent=msg+'. '+(msg.includes('טוקן')?'צור טוקן חדש והדבק אותו כאן.':'אפשר לנסות שוב בעוד רגע.');
+    if(!silent) toast('העדכון נכשל');
   }
 }
 
 /* ---------------- status ---------------- */
 function configured(){ return !!apiCfg.token || !!apiCfg.base; }
-
-function setStatus(state,text){
-  const chip=$('statusChip');
-  chip.className='chip'+(state?' '+state:'');
-  $('statusText').textContent=text;
-}
+function setStatus(state,text){ $('statusChip').className='chip'+(state?' '+state:''); $('statusText').textContent=text; }
 function refreshStatus(){
   if(!configured() && !lastSync) return setStatus('','לא מחובר');
-  if(!lastSync) return setStatus('','מחובר · טרם סונכרן');
-  const d=new Date(lastSync), now=new Date();
+  if(!lastSync) return setStatus('','טרם עודכן');
+  const d=new Date(lastSync);
   const hhmm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
-  const sameDay=d.toDateString()===now.toDateString();
-  setStatus('ok', sameDay ? 'עודכן '+hhmm : 'עודכן '+d.getDate()+'/'+(d.getMonth()+1));
+  const sameDay=d.toDateString()===new Date().toDateString();
+  setStatus('ok', sameDay?'עודכן '+hhmm : 'עודכן '+d.getDate()+'/'+(d.getMonth()+1));
 }
 
 /* ---------------- calc ---------------- */
@@ -478,11 +495,16 @@ function calc(){
   const now=new Date(), y=now.getFullYear(), m=now.getMonth(), dom=now.getDate();
   const daysInMonth=new Date(y,m+1,0).getDate();
 
+  // Manual entries are stamped with the day they were typed, so an entry from an
+  // earlier day counts toward the month without inflating today.
+  const ym=ymNow();
+  const manualMonth=manualData.filter(e=>e.ym===ym);
+
   const allToday=fileData.filter(x=>x.d===dom).map(x=>({name:x.name,amt:x.amt}));
-  for(const e of manualData) allToday.push({name:e.desc||'הוצאה',amt:e.amt,manual:true,id:e.id});
+  for(const e of manualMonth) if(e.d===dom) allToday.push({name:e.desc||'הוצאה',amt:e.amt,manual:true,id:e.id});
 
   const spentToday=allToday.reduce((s,x)=>s+x.amt,0);
-  const spentMonth=fileData.reduce((s,x)=>s+x.amt,0)+manualData.reduce((s,x)=>s+x.amt,0);
+  const spentMonth=fileData.reduce((s,x)=>s+x.amt,0)+manualMonth.reduce((s,x)=>s+x.amt,0);
   const daysLeft=daysInMonth-dom;
 
   const totalBudget=DAILY*daysInMonth;
@@ -506,7 +528,7 @@ function calc(){
 /* ---------------- render ---------------- */
 let lastShown=null;
 function animateTo(el,to){
-  const from = lastShown===null ? to : lastShown;
+  const from=lastShown===null?to:lastShown;
   lastShown=to;
   if(from===to){ el.textContent=fmt(to); return; }
   const t0=performance.now(), dur=600;
@@ -520,46 +542,45 @@ function animateTo(el,to){
 function render(animate){
   const c=calc();
 
-  $('dateLabel').textContent=`יום ${DAYS[c.now.getDay()]} · ${c.dom} ב${MONTHS[c.m]}`;
+  $('dateLabel').textContent=`יום ${DAYS[c.now.getDay()]}, ${c.dom} ב${MONTHS[c.m]}`;
 
-  const amtEl=$('remainingToday');
-  const shown=Math.max(0,Math.round(c.remaining));
-  amtEl.className='r-amount'+(c.remaining<0?' neg':'');
-  if(animate) animateTo(amtEl,shown); else { amtEl.textContent=fmt(shown); lastShown=shown; }
-
-  $('ceilingLine').textContent='מתוך '+fmt(c.dynamicCeiling)+(c.dynamicCeiling<DAILY-1?' · תקרה מותאמת':'');
-
-  const meter=$('meter'), pct=c.dynamicCeiling>0?Math.min(100,(c.spentToday/c.dynamicCeiling)*100):100;
-  meter.classList.toggle('over',c.remaining<0);
-  meter.firstElementChild.style.width=pct+'%';
+  const big=$('remainingToday'), shown=Math.max(0,Math.round(c.remaining));
+  big.className='big num'+(c.remaining<0?' over':'');
+  if(animate) animateTo(big,shown); else { big.textContent=fmt(shown); lastShown=shown; }
 
   $('spentToday').textContent=fmt(c.spentToday);
-  $('monthSpent').textContent=fmt(c.spentMonth);
-  $('daysLeft').textContent=c.daysLeft;
+  $('ceilingVal').textContent=fmt(c.dynamicCeiling);
+  const bar=$('bar'), pct=c.dynamicCeiling>0?Math.min(100,(c.spentToday/c.dynamicCeiling)*100):100;
+  bar.classList.toggle('over',c.remaining<0);
+  bar.firstElementChild.style.width=pct+'%';
 
   const list=$('todayList');
-  list.innerHTML = c.allToday.length===0
-    ? '<div class="empty">עוד לא יצא כסף היום</div>'
-    : c.allToday.map(x=>`<div class="entry">${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחק">✕</button>`:'<span style="width:14px"></span>'}<span class="amt">-${fmt(x.amt).slice(1)}</span><span class="desc">${esc(x.name)}</span></div>`).join('');
+  list.innerHTML = c.allToday.length>0
+    ? c.allToday.map(x=>`<div class="row">${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${x.manual?'<span class="sub">נרשם ידנית</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('')
+    : '<div class="blank"><div class="t">עוד לא נרשמה הוצאה היום</div></div>';
+
+  $('monthSpent').textContent=fmt(c.spentMonth);
 
   const avgEl=$('avgDaily');
   avgEl.textContent=fmt(c.avg);
-  avgEl.className='v'+(c.avg>DAILY?' over':' under');
-  $('avgNote').textContent=c.avg>DAILY?'מעל ₪300 ליום':'מתחת ל-₪300 ליום';
+  avgEl.className='val num '+(c.avg>DAILY?'neg':'pos');
+  $('avgNote').textContent=c.avg>DAILY?'מעל היעד של ₪300':'מתחת ליעד של ₪300';
 
   const dEl=$('monthDelta');
-  dEl.textContent=(c.delta>=0?'+':'−')+fmt(c.delta).slice(1);
-  dEl.className='v'+(c.delta<0?' over':' under');
-  $('deltaNote').textContent=c.delta>=0?'חסכת מהקצב':'מעל הקצב';
+  dEl.textContent=(c.delta>=0?'+':'-')+fmt(c.delta);
+  dEl.className='val num '+(c.delta<0?'neg':'pos');
+  $('deltaNote').textContent=c.delta>=0?'חסכת עד עכשיו':'מעל הקצב עד עכשיו';
 
+  $('daysLeft').textContent=c.daysLeft;
+
+  // Only worth interrupting for when the ceiling actually runs out before the month
+  // does. "It declines, but you'll be fine" is noise on a screen meant to be glanced at.
   const warn=$('rateWarning');
-  if(c.dynamicCeiling>=DAILY || c.daysUntilZero===null){ warn.classList.add('hidden'); }
+  if(c.daysUntilZero===null || c.daysUntilZero>c.daysLeft){ warn.classList.add('hidden'); }
   else{
-    const urgent=c.daysUntilZero<=c.daysLeft;
-    warn.className='note'+(urgent?' hot':'');
-    warn.innerHTML='<span class="ic">'+(urgent?'⚠':'◔')+'</span><span>התקרה יורדת בכ-'+fmt(c.declinePerDay)+
-      ' ליום. '+(urgent?'בקצב הזה היא מתאפסת בעוד כ-'+c.daysUntilZero+' ימים — לפני סוף החודש.'
-                     :'החודש ייגמר לפני שהיא מתאפסת.')+'</span>';
+    warn.className='banner warn';
+    warn.innerHTML='<span class="ic">!</span><span>בקצב הזה התקציב היומי יתאפס בעוד כ-'+c.daysUntilZero+
+      ' ימים, לפני סוף החודש. התקרה יורדת בכ-'+fmt(c.declinePerDay)+' בכל יום.</span>';
   }
 
   $('investigateBtn').classList.toggle('hidden',fileData.length===0&&manualData.length===0);
@@ -568,15 +589,13 @@ function render(animate){
   refreshStatus();
 }
 
-function esc(s){ return String(s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
-
 function renderInvestigation(){
   const panel=$('investigatePanel');
   const all=[
     ...fileData.map(x=>({name:x.name||'ללא שם',amt:x.amt,day:x.d})),
-    ...manualData.map(x=>({name:x.desc||'הוצאה ידנית',amt:x.amt,day:null}))
+    ...manualData.map(x=>({name:x.desc||'מזומן',amt:x.amt,day:null}))
   ];
-  if(all.length===0){ panel.innerHTML='<div class="empty">אין עדיין נתונים לחודש הזה</div>'; panel.classList.remove('hidden'); return; }
+  if(all.length===0){ panel.innerHTML=''; panel.classList.add('hidden'); return; }
 
   const top=[...all].sort((a,b)=>b.amt-a.amt).slice(0,6);
   const groups={};
@@ -587,12 +606,15 @@ function renderInvestigation(){
   }
   const grouped=Object.values(groups).filter(g=>g.count>=2).sort((a,b)=>b.total-a.total).slice(0,6);
 
-  let html='<div style="padding:12px 15px 4px"><div class="sec" style="margin:0 0 6px">הגדולות ביותר</div></div>';
-  html+=top.map(x=>`<div class="entry"><span class="amt">-${fmt(x.amt).slice(1)}</span><span class="desc">${esc(x.name)}${x.day?` <span style="color:var(--dim-2);font-size:11.5px">יום ${x.day}</span>`:''}</span></div>`).join('');
-  html+='<div style="padding:14px 15px 4px"><div class="sec" style="margin:0 0 6px">חוזר על עצמו</div></div>';
-  html+= grouped.length===0
-    ? '<div class="empty">אין הוצאה שחוזרת פעמיים או יותר</div>'
-    : grouped.map(g=>`<div class="entry"><span class="amt">-${fmt(g.total).slice(1)}</span><span class="desc">${esc(g.name)} <span style="color:var(--dim-2);font-size:11.5px">× ${g.count}</span></span></div>`).join('');
+  let html='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">ההוצאות הגדולות</div></div>';
+  // day: a number for a purchase made this month, 0 for one carried into this
+  // cashflow month from earlier, null for a cash entry typed in by hand.
+  const when = d => d===null ? 'מזומן' : d>0 ? d+' ב'+MONTHS[new Date().getMonth()] : 'חיוב מקנייה קודמת';
+  html+=top.map(x=>`<div class="row"><span class="lbl"><b>${esc(x.name)}</b><span class="sub">${when(x.day)}</span></span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
+  if(grouped.length){
+    html+='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">חוזר על עצמו</div></div>';
+    html+=grouped.map(g=>`<div class="row"><span class="lbl"><b>${esc(g.name)}</b><span class="sub">${g.count} פעמים החודש</span></span><span class="val neg num">-${fmt(g.total)}</span></div>`).join('');
+  }
   panel.innerHTML=html;
   panel.classList.remove('hidden');
 }
@@ -604,8 +626,7 @@ function openSheet(){
   $('scrim').classList.add('open'); $('sheet').classList.add('open');
 }
 function closeSheet(){ $('scrim').classList.remove('open'); $('sheet').classList.remove('open'); }
-
-function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),1600); }
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),1700); }
 
 /* ---------------- events ---------------- */
 $('openSettings').addEventListener('click',openSheet);
@@ -616,34 +637,81 @@ $('scrim').addEventListener('click',closeSheet);
 $('saveCfgBtn').addEventListener('click',()=>{
   apiCfg.token=$('tokenInput').value.trim();
   apiCfg.base=$('baseInput').value.trim();
-  save(); closeSheet(); render();
-  syncFromApi(false);
+  save(); closeSheet(); render(); syncFromApi(false);
 });
 $('syncBtn').addEventListener('click',()=>{ closeSheet(); syncFromApi(false); });
 
-$('addBtn').addEventListener('click',()=>{
-  const ai=$('amountInput'), di=$('descInput');
-  const v=parseFloat(ai.value);
-  if(!v||v<=0){ ai.focus(); return; }
-  manualData.push({id:Date.now(),amt:v,desc:di.value.trim()});
-  ai.value=''; di.value=''; ai.blur(); di.blur();
-  save(); render(true); toast('נוסף ✓');
+/* ---------------- keypad ---------------- */
+// Typing on the OS keyboard is the slow part of logging a purchase at the till, so
+// this is a register-style pad: digits, quick adders, and the remaining allowance
+// updating under your thumb as you type.
+let padValue='';
+
+function padNum(){ return parseFloat(padValue||'0')||0; }
+
+function padRender(){
+  const v=padNum();
+  const el=$('padAmt');
+  el.textContent='₪'+(padValue===''?'0':padValue);
+  el.classList.toggle('zero',v<=0);
+
+  const c=calc(), left=Math.round(c.remaining-v);
+  const box=$('padLeft');
+  box.classList.toggle('over',left<0);
+  box.innerHTML = v>0
+    ? (left>=0 ? `יישאר להיום <b>${fmt(left)}</b>` : `חריגה של <b>${fmt(left)}</b> מהתקרה של היום`)
+    : `נשאר להיום <b>${fmt(Math.max(0,c.remaining))}</b>`;
+  $('padSave').disabled = v<=0;
+}
+
+function openPad(){
+  padValue=''; $('padDesc').value=''; padRender();
+  $('padScrim').classList.add('open'); $('padSheet').classList.add('open');
+}
+function closePad(){ $('padScrim').classList.remove('open'); $('padSheet').classList.remove('open'); }
+
+$('openPad').addEventListener('click',openPad);
+$('padScrim').addEventListener('click',closePad);
+$('padCancel').addEventListener('click',closePad);
+
+$('keys').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  const k=b.dataset.k;
+  if(k==='del') padValue=padValue.slice(0,-1);
+  else if(k==='.'){ if(!padValue.includes('.')) padValue=(padValue||'0')+'.'; }
+  else if(/^\d$/.test(k)){
+    const dot=padValue.indexOf('.');
+    if(dot>=0 && padValue.length-dot>2) return;   // two decimals is as fine as money gets
+    if(padValue.replace('.','').length>=7) return;
+    padValue = padValue==='0' ? k : padValue+k;
+  }
+  padRender();
 });
 
-[$('amountInput'),$('descInput')].forEach(el=>{
-  el.addEventListener('keydown',e=>{ if(e.key==='Enter') $('addBtn').click(); });
+document.querySelector('.quick').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  padValue=String(Math.round((padNum()+parseFloat(b.dataset.q))*100)/100);
+  padRender();
+});
+
+$('padSave').addEventListener('click',()=>{
+  const v=padNum();
+  if(v<=0) return;
+  const n=new Date();
+  manualData.push({id:Date.now(),amt:v,desc:$('padDesc').value.trim(),ym:ymNow(),d:n.getDate()});
+  closePad(); save(); render(true); toast('נוסף '+fmt(v));
 });
 
 $('todayList').addEventListener('click',e=>{
   const btn=e.target.closest('.del'); if(!btn) return;
-  const id=parseInt(btn.dataset.id,10);
-  manualData=manualData.filter(x=>x.id!==id);
+  manualData=manualData.filter(x=>x.id!==parseInt(btn.dataset.id,10));
   save(); render(true); toast('נמחק');
 });
 
 $('investigateBtn').addEventListener('click',()=>{
   const p=$('investigatePanel');
-  if(p.classList.contains('hidden')) renderInvestigation(); else p.classList.add('hidden');
+  if(p.classList.contains('hidden')){ renderInvestigation(); $('investigateBtn').textContent='סגירה'; }
+  else{ p.classList.add('hidden'); $('investigateBtn').textContent='לאן זה הלך ›'; }
 });
 
 $('clearBtn').addEventListener('click',()=>{
@@ -657,10 +725,8 @@ $('fileInput').addEventListener('change',e=>{
   const file=e.target.files[0]; if(!file) return;
   const r=new FileReader();
   r.onload=ev=>{
-    try{
-      ingestCSV(parseCSV(ev.target.result));
-      save(); closeSheet(); render(true); toast('הקובץ נטען ✓');
-    }catch(err){ toast('לא הצלחתי לקרוא את הקובץ'); }
+    try{ ingestCSV(parseCSV(ev.target.result)); save(); closeSheet(); render(true); toast('הקובץ נטען'); }
+    catch(err){ toast('לא הצלחתי לקרוא את הקובץ'); }
   };
   r.readAsText(file,'UTF-8');
 });
@@ -668,7 +734,7 @@ $('fileInput').addEventListener('change',e=>{
 /* ---------------- boot ---------------- */
 load();
 render();
-// Same-origin relay may hold the token server-side, so try a sync even with no
+// The same-origin relay may hold the token server-side, so try a sync even with no
 // token pasted here — a 401 comes back with a clear reason either way.
 if(configured() || !apiCfg.base) syncFromApi(true);
 </script>
