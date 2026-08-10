@@ -132,20 +132,38 @@
   .addbar{ position:fixed; bottom:0; left:0; right:0; z-index:60;
     padding:12px 16px calc(12px + var(--safe-b));
     background:linear-gradient(to top, var(--bg) 65%, rgba(244,245,247,0)); }
-  .addbar-inner{ max-width:480px; margin:0 auto; display:flex; gap:9px; align-items:center;
-    background:var(--card); border-radius:18px; padding:8px;
-    box-shadow:0 4px 22px -6px rgba(24,28,50,.22); }
-  .addbar input{ background:none; border:none; color:var(--ink); font-family:inherit;
-    font-size:16px; padding:11px 8px; min-width:0; }
-  .addbar input:focus{ outline:none; }
-  .addbar .amt{ width:92px; flex:none; background:var(--bg); border-radius:12px; text-align:center;
-    font-weight:600; font-variant-numeric:tabular-nums; direction:ltr; }
-  .addbar .what{ flex:1; }
-  .addbar input::placeholder{ color:var(--ink-3); font-weight:400; }
-  .addbar .go{ flex:none; width:48px; height:46px; border:none; border-radius:14px; background:var(--blue);
-    color:#fff; font-size:26px; font-weight:500; line-height:1; display:grid; place-items:center;
+  .addbar-inner{ max-width:480px; margin:0 auto; }
+  .addbig{ display:flex; align-items:center; justify-content:center; gap:10px; width:100%;
+    border:none; border-radius:18px; background:var(--blue); color:#fff; padding:17px;
+    font-size:17px; font-weight:600; box-shadow:0 8px 22px -8px rgba(91,108,245,.8);
     transition:transform .12s; }
-  .addbar .go:active{ transform:scale(.92); }
+  .addbig:active{ transform:scale(.985); }
+  .addbig .plus{ font-size:22px; font-weight:500; line-height:1; }
+
+  /* ---------- keypad ---------- */
+  .pad{ padding-bottom:calc(18px + var(--safe-b)); }
+  .pad-amt{ font-size:46px; font-weight:700; letter-spacing:-1.5px; text-align:center;
+    line-height:1.1; color:var(--ink); }
+  .pad-amt.zero{ color:#C3C7D2; }
+  .pad-left{ text-align:center; font-size:15px; color:var(--ink-2); margin-top:6px; min-height:23px; }
+  .pad-left b{ font-weight:600; }
+  .pad-left.over b{ color:var(--orange); }
+  .pad-desc{ width:100%; background:var(--card); border:1.5px solid transparent; border-radius:14px;
+    padding:14px; font-size:16px; font-family:inherit; color:var(--ink); margin:16px 0 12px;
+    box-shadow:0 1px 3px rgba(24,28,50,.07); }
+  .pad-desc:focus{ outline:none; border-color:var(--blue); }
+  .quick{ display:flex; gap:8px; margin-bottom:12px; }
+  .quick button{ flex:1; background:var(--card); border:none; border-radius:12px; padding:11px 4px;
+    font-size:15px; font-weight:600; color:var(--blue); font-variant-numeric:tabular-nums;
+    box-shadow:0 1px 3px rgba(24,28,50,.07); }
+  .quick button:active{ background:var(--blue-soft); }
+  /* LTR so 1 sits top-left like every calculator, even though the page is RTL */
+  .keys{ display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-bottom:14px; direction:ltr; }
+  .keys button{ background:var(--card); border:none; border-radius:14px; height:58px;
+    font-size:24px; font-weight:500; color:var(--ink); font-variant-numeric:tabular-nums;
+    box-shadow:0 1px 3px rgba(24,28,50,.07); transition:transform .08s, background-color .12s; }
+  .keys button:active{ transform:scale(.95); background:var(--blue-soft); }
+  .keys button.util{ font-size:20px; color:var(--ink-2); }
 
   /* ---------- sheet ---------- */
   .scrim{ position:fixed; inset:0; background:rgba(20,22,36,.45); z-index:80;
@@ -244,10 +262,31 @@
 
 <div class="addbar">
   <div class="addbar-inner">
-    <input class="amt" type="number" id="amountInput" placeholder="₪" inputmode="decimal" step="0.01">
-    <input class="what" type="text" id="descInput" placeholder="הוצאת מזומן — על מה?">
-    <button class="go" id="addBtn" aria-label="הוסף">+</button>
+    <button class="addbig" id="openPad"><span class="plus">+</span><span>הוספת הוצאה</span></button>
   </div>
+</div>
+
+<div class="scrim" id="padScrim"></div>
+<div class="sheet pad" id="padSheet" role="dialog" aria-label="הוספת הוצאה">
+  <div class="grab"></div>
+  <div class="pad-amt zero num" id="padAmt">₪0</div>
+  <div class="pad-left" id="padLeft"></div>
+  <input class="pad-desc" id="padDesc" placeholder="על מה? (לא חובה)" autocomplete="off">
+  <div class="quick">
+    <button data-q="10">10+</button>
+    <button data-q="20">20+</button>
+    <button data-q="50">50+</button>
+    <button data-q="100">100+</button>
+  </div>
+  <div class="keys" id="keys">
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+    <button data-k="." class="util">.</button><button data-k="0">0</button>
+    <button data-k="del" class="util" aria-label="מחיקה">⌫</button>
+  </div>
+  <button class="btn btn-primary" id="padSave">הוספה</button>
+  <button class="btn btn-ghost" id="padCancel" style="margin-top:9px">ביטול</button>
 </div>
 
 <div class="scrim" id="scrim"></div>
@@ -315,6 +354,10 @@ function save(){ try{
 }catch(e){} }
 function load(){ try{
   const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m);
+  // Entries used to carry no date and were all counted as "today", forever. Stamp
+  // the old ones with today so they keep behaving as they did until they age out.
+  const n=new Date(), ym=ymNow();
+  manualData=manualData.map(e=>e.ym?e:Object.assign({ym,d:n.getDate()},e));
   const f=localStorage.getItem('fileData'); if(f) fileData=JSON.parse(f);
   const c=localStorage.getItem('apiCfg'); if(c) apiCfg=Object.assign({token:'',base:''},JSON.parse(c));
   const s=localStorage.getItem('lastSync'); if(s) lastSync=parseInt(s,10)||null;
@@ -374,6 +417,23 @@ function mapApiTransactions(list){
   return out;
 }
 
+// A card purchase typed in by hand today shows up in RiseUp a day or two later. Without
+// this it would then be counted twice — once as the manual entry, once as the synced
+// charge. Each synced charge can retire at most one manual entry of the same day and
+// amount, so two genuinely separate ₪50 buys on the same day don't collapse into one.
+function dropConfirmedManual(){
+  const claimed=new Set();
+  const kept=[];
+  let dropped=0;
+  for(const e of manualData){
+    const i=fileData.findIndex((t,idx)=>!claimed.has(idx) && t.d===e.d && Math.abs(t.amt-e.amt)<0.5);
+    if(i>=0 && e.ym===ymNow()){ claimed.add(i); dropped++; }
+    else kept.push(e);
+  }
+  manualData=kept;
+  return dropped;
+}
+
 function endpoint(){
   const base=(apiCfg.base||'').replace(/\/+$/,'');
   if(!base) return '/api/riseup/transactions';
@@ -401,9 +461,10 @@ async function syncFromApi(silent){
 
     const data=await res.json();
     fileData=mapApiTransactions(data && data.transactions);
+    const merged=dropConfirmedManual();
     lastSync=Date.now();
     save(); render(true);
-    if(!silent) toast('הנתונים עודכנו');
+    if(!silent) toast(merged?`עודכן · ${merged} הוצאות כבר נקלטו ברייזאפ`:'הנתונים עודכנו');
   }catch(err){
     // fetch() rejects with TypeError for both a CORS block and being offline — the
     // browser deliberately hides which, so the wording has to cover both.
@@ -434,11 +495,16 @@ function calc(){
   const now=new Date(), y=now.getFullYear(), m=now.getMonth(), dom=now.getDate();
   const daysInMonth=new Date(y,m+1,0).getDate();
 
+  // Manual entries are stamped with the day they were typed, so an entry from an
+  // earlier day counts toward the month without inflating today.
+  const ym=ymNow();
+  const manualMonth=manualData.filter(e=>e.ym===ym);
+
   const allToday=fileData.filter(x=>x.d===dom).map(x=>({name:x.name,amt:x.amt}));
-  for(const e of manualData) allToday.push({name:e.desc||'הוצאה',amt:e.amt,manual:true,id:e.id});
+  for(const e of manualMonth) if(e.d===dom) allToday.push({name:e.desc||'הוצאה',amt:e.amt,manual:true,id:e.id});
 
   const spentToday=allToday.reduce((s,x)=>s+x.amt,0);
-  const spentMonth=fileData.reduce((s,x)=>s+x.amt,0)+manualData.reduce((s,x)=>s+x.amt,0);
+  const spentMonth=fileData.reduce((s,x)=>s+x.amt,0)+manualMonth.reduce((s,x)=>s+x.amt,0);
   const daysLeft=daysInMonth-dom;
 
   const totalBudget=DAILY*daysInMonth;
@@ -451,13 +517,12 @@ function calc(){
   // the 1st — otherwise tracking that started mid-month reads as a gentler slope.
   const days=fileData.map(x=>x.d).filter(d=>d>0);
   const firstDay=days.length?Math.min(...days):dom;
-  const lastDay=days.length?Math.max(...days):null;
   const elapsed=Math.max(1,dom-firstDay+1);
   const declinePerDay=(DAILY-dynamicCeiling)/elapsed;
   const daysUntilZero=declinePerDay>0?Math.floor(dynamicCeiling/declinePerDay):null;
 
   return {now,m,dom,daysInMonth,remaining,spentToday,spentMonth,allToday,avg,delta,daysLeft,
-          dynamicCeiling,declinePerDay,daysUntilZero,lastDay};
+          dynamicCeiling,declinePerDay,daysUntilZero};
 }
 
 /* ---------------- render ---------------- */
@@ -489,18 +554,10 @@ function render(animate){
   bar.classList.toggle('over',c.remaining<0);
   bar.firstElementChild.style.width=pct+'%';
 
-  // today's ledger — when the month has data but today doesn't, say why instead of
-  // implying nothing was spent: card charges reach the cashflow a day or two late.
   const list=$('todayList');
-  if(c.allToday.length>0){
-    list.innerHTML=c.allToday.map(x=>`<div class="row">${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name)}</b>${x.manual?'<span class="sub">מזומן — נוסף ידנית</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
-  } else if(fileData.length>0){
-    const last=c.lastDay?`החיוב האחרון שנקלט הוא מ-${c.lastDay} ב${MONTHS[c.m]}. `:'';
-    list.innerHTML='<div class="blank"><div class="t">עוד לא נקלט חיוב של היום</div>'+
-      `<div class="n">${last}חיובי אשראי מגיעים לרייזאפ יום־יומיים אחרי הקנייה, אז מה שקנית היום עדיין לא מופיע. מזומן אפשר להוסיף בשורה שלמטה.</div></div>`;
-  } else {
-    list.innerHTML='<div class="blank"><div class="t">עוד לא יצא כסף היום</div><div class="n">הוצאות מזומן אפשר להוסיף בשורה שלמטה.</div></div>';
-  }
+  list.innerHTML = c.allToday.length>0
+    ? c.allToday.map(x=>`<div class="row">${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${x.manual?'<span class="sub">נרשם ידנית</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('')
+    : '<div class="blank"><div class="t">עוד לא נרשמה הוצאה היום</div></div>';
 
   $('monthSpent').textContent=fmt(c.spentMonth);
 
@@ -584,16 +641,65 @@ $('saveCfgBtn').addEventListener('click',()=>{
 });
 $('syncBtn').addEventListener('click',()=>{ closeSheet(); syncFromApi(false); });
 
-$('addBtn').addEventListener('click',()=>{
-  const ai=$('amountInput'), di=$('descInput');
-  const v=parseFloat(ai.value);
-  if(!v||v<=0){ ai.focus(); return; }
-  manualData.push({id:Date.now(),amt:v,desc:di.value.trim()});
-  ai.value=''; di.value=''; ai.blur(); di.blur();
-  save(); render(true); toast('נוסף');
+/* ---------------- keypad ---------------- */
+// Typing on the OS keyboard is the slow part of logging a purchase at the till, so
+// this is a register-style pad: digits, quick adders, and the remaining allowance
+// updating under your thumb as you type.
+let padValue='';
+
+function padNum(){ return parseFloat(padValue||'0')||0; }
+
+function padRender(){
+  const v=padNum();
+  const el=$('padAmt');
+  el.textContent='₪'+(padValue===''?'0':padValue);
+  el.classList.toggle('zero',v<=0);
+
+  const c=calc(), left=Math.round(c.remaining-v);
+  const box=$('padLeft');
+  box.classList.toggle('over',left<0);
+  box.innerHTML = v>0
+    ? (left>=0 ? `יישאר להיום <b>${fmt(left)}</b>` : `חריגה של <b>${fmt(left)}</b> מהתקרה של היום`)
+    : `נשאר להיום <b>${fmt(Math.max(0,c.remaining))}</b>`;
+  $('padSave').disabled = v<=0;
+}
+
+function openPad(){
+  padValue=''; $('padDesc').value=''; padRender();
+  $('padScrim').classList.add('open'); $('padSheet').classList.add('open');
+}
+function closePad(){ $('padScrim').classList.remove('open'); $('padSheet').classList.remove('open'); }
+
+$('openPad').addEventListener('click',openPad);
+$('padScrim').addEventListener('click',closePad);
+$('padCancel').addEventListener('click',closePad);
+
+$('keys').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  const k=b.dataset.k;
+  if(k==='del') padValue=padValue.slice(0,-1);
+  else if(k==='.'){ if(!padValue.includes('.')) padValue=(padValue||'0')+'.'; }
+  else if(/^\d$/.test(k)){
+    const dot=padValue.indexOf('.');
+    if(dot>=0 && padValue.length-dot>2) return;   // two decimals is as fine as money gets
+    if(padValue.replace('.','').length>=7) return;
+    padValue = padValue==='0' ? k : padValue+k;
+  }
+  padRender();
 });
-[$('amountInput'),$('descInput')].forEach(el=>{
-  el.addEventListener('keydown',e=>{ if(e.key==='Enter') $('addBtn').click(); });
+
+document.querySelector('.quick').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  padValue=String(Math.round((padNum()+parseFloat(b.dataset.q))*100)/100);
+  padRender();
+});
+
+$('padSave').addEventListener('click',()=>{
+  const v=padNum();
+  if(v<=0) return;
+  const n=new Date();
+  manualData.push({id:Date.now(),amt:v,desc:$('padDesc').value.trim(),ym:ymNow(),d:n.getDate()});
+  closePad(); save(); render(true); toast('נוסף '+fmt(v));
 });
 
 $('todayList').addEventListener('click',e=>{
