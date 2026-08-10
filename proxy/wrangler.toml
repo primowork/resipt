@@ -1,0 +1,12 @@
+name = "resipt-riseup-proxy"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# Optional: lock the proxy to the origin the app is served from.
+# Leave unset (or "*") when opening index.html straight from disk (file:// sends Origin: null).
+# [vars]
+# ALLOWED_ORIGIN = "https://your-app-host.example"
+
+# RISEUP_PAT and APP_SECRET are secrets, not vars:
+#   npx wrangler secret put RISEUP_PAT
+#   npx wrangler secret put APP_SECRET
