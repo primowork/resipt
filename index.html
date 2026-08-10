@@ -142,9 +142,7 @@
 
   /* ---------- keypad ---------- */
   .pad{ padding-bottom:calc(18px + var(--safe-b)); }
-  .pad-amt{ font-size:46px; font-weight:700; letter-spacing:-1.5px; text-align:center;
-    line-height:1.1; color:var(--ink); }
-  .pad-amt.zero{ color:#C3C7D2; }
+  .pad-title{ text-align:center; font-size:18px; font-weight:700; letter-spacing:-.3px; }
   .pad-left{ text-align:center; font-size:15px; color:var(--ink-2); margin-top:6px; min-height:23px; }
   .pad-left b{ font-weight:600; }
   .pad-left.over b{ color:var(--orange); }
@@ -152,18 +150,27 @@
     padding:14px; font-size:16px; font-family:inherit; color:var(--ink); margin:16px 0 12px;
     box-shadow:0 1px 3px rgba(24,28,50,.07); }
   .pad-desc:focus{ outline:none; border-color:var(--blue); }
-  .quick{ display:flex; gap:8px; margin-bottom:12px; }
-  .quick button{ flex:1; background:var(--card); border:none; border-radius:12px; padding:11px 4px;
-    font-size:15px; font-weight:600; color:var(--blue); font-variant-numeric:tabular-nums;
-    box-shadow:0 1px 3px rgba(24,28,50,.07); }
-  .quick button:active{ background:var(--blue-soft); }
-  /* LTR so 1 sits top-left like every calculator, even though the page is RTL */
-  .keys{ display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-bottom:14px; direction:ltr; }
-  .keys button{ background:var(--card); border:none; border-radius:14px; height:58px;
-    font-size:24px; font-weight:500; color:var(--ink); font-variant-numeric:tabular-nums;
-    box-shadow:0 1px 3px rgba(24,28,50,.07); transition:transform .08s, background-color .12s; }
-  .keys button:active{ transform:scale(.95); background:var(--blue-soft); }
-  .keys button.util{ font-size:20px; color:var(--ink-2); }
+
+  /* ---------- wheel ---------- */
+  .wheel{ position:relative; height:242px; margin:4px 0 6px; }
+  .wheel-band{ position:absolute; left:0; right:0; top:99px; height:44px; border-radius:12px;
+    background:var(--blue-soft); pointer-events:none; }
+  .wheel-band .cur{ position:absolute; inset-inline-start:calc(50% + 34px); top:0; line-height:44px;
+    font-size:17px; font-weight:600; color:var(--blue); }
+  .wheel-scroll{ position:relative; height:242px; overflow-y:scroll; scroll-snap-type:y mandatory;
+    -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .wheel-scroll::-webkit-scrollbar{ display:none; }
+  .wheel-scroll .spacer{ height:99px; }
+  .w-item{ height:44px; line-height:44px; text-align:center; scroll-snap-align:center;
+    font-size:26px; font-weight:500; color:#B9BECB; font-variant-numeric:tabular-nums;
+    transition:color .12s, transform .12s; }
+  .w-item.near{ color:#7A8090; }
+  .w-item.sel{ color:var(--ink); font-weight:700; transform:scale(1.14); }
+  /* fade the ends so the column reads as a drum rather than a cut-off list */
+  .wheel::before,.wheel::after{ content:''; position:absolute; left:0; right:0; height:88px;
+    pointer-events:none; z-index:2; }
+  .wheel::before{ top:0; background:linear-gradient(var(--bg),rgba(244,245,247,0)); }
+  .wheel::after{ bottom:0; background:linear-gradient(rgba(244,245,247,0),var(--bg)); }
 
   /* ---------- sheet ---------- */
   .scrim{ position:fixed; inset:0; background:rgba(20,22,36,.45); z-index:80;
@@ -269,22 +276,16 @@
 <div class="scrim" id="padScrim"></div>
 <div class="sheet pad" id="padSheet" role="dialog" aria-label="הוספת הוצאה">
   <div class="grab"></div>
-  <div class="pad-amt zero num" id="padAmt">₪0</div>
+  <div class="pad-title">כמה שילמת במזומן?</div>
+  <div class="wheel">
+    <div class="wheel-band"><span class="cur">₪</span></div>
+    <div class="wheel-scroll" id="wheelScroll">
+      <div class="spacer"></div>
+      <div class="spacer"></div>
+    </div>
+  </div>
   <div class="pad-left" id="padLeft"></div>
   <input class="pad-desc" id="padDesc" placeholder="על מה? (לא חובה)" autocomplete="off">
-  <div class="quick">
-    <button data-q="10">10+</button>
-    <button data-q="20">20+</button>
-    <button data-q="50">50+</button>
-    <button data-q="100">100+</button>
-  </div>
-  <div class="keys" id="keys">
-    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
-    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
-    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
-    <button data-k="." class="util">.</button><button data-k="0">0</button>
-    <button data-k="del" class="util" aria-label="מחיקה">⌫</button>
-  </div>
   <button class="btn btn-primary" id="padSave">הוספה</button>
   <button class="btn btn-ghost" id="padCancel" style="margin-top:9px">ביטול</button>
 </div>
@@ -417,23 +418,6 @@ function mapApiTransactions(list){
   return out;
 }
 
-// A card purchase typed in by hand today shows up in RiseUp a day or two later. Without
-// this it would then be counted twice — once as the manual entry, once as the synced
-// charge. Each synced charge can retire at most one manual entry of the same day and
-// amount, so two genuinely separate ₪50 buys on the same day don't collapse into one.
-function dropConfirmedManual(){
-  const claimed=new Set();
-  const kept=[];
-  let dropped=0;
-  for(const e of manualData){
-    const i=fileData.findIndex((t,idx)=>!claimed.has(idx) && t.d===e.d && Math.abs(t.amt-e.amt)<0.5);
-    if(i>=0 && e.ym===ymNow()){ claimed.add(i); dropped++; }
-    else kept.push(e);
-  }
-  manualData=kept;
-  return dropped;
-}
-
 function endpoint(){
   const base=(apiCfg.base||'').replace(/\/+$/,'');
   if(!base) return '/api/riseup/transactions';
@@ -461,10 +445,9 @@ async function syncFromApi(silent){
 
     const data=await res.json();
     fileData=mapApiTransactions(data && data.transactions);
-    const merged=dropConfirmedManual();
     lastSync=Date.now();
     save(); render(true);
-    if(!silent) toast(merged?`עודכן · ${merged} הוצאות כבר נקלטו ברייזאפ`:'הנתונים עודכנו');
+    if(!silent) toast('הנתונים עודכנו');
   }catch(err){
     // fetch() rejects with TypeError for both a CORS block and being offline — the
     // browser deliberately hides which, so the wording has to cover both.
@@ -556,7 +539,7 @@ function render(animate){
 
   const list=$('todayList');
   list.innerHTML = c.allToday.length>0
-    ? c.allToday.map(x=>`<div class="row">${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${x.manual?'<span class="sub">נרשם ידנית</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('')
+    ? c.allToday.map(x=>`<div class="row">${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${x.manual?'<span class="sub">מזומן</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('')
     : '<div class="blank"><div class="t">עוד לא נרשמה הוצאה היום</div></div>';
 
   $('monthSpent').textContent=fmt(c.spentMonth);
@@ -641,31 +624,66 @@ $('saveCfgBtn').addEventListener('click',()=>{
 });
 $('syncBtn').addEventListener('click',()=>{ closeSheet(); syncFromApi(false); });
 
-/* ---------------- keypad ---------------- */
-// Typing on the OS keyboard is the slow part of logging a purchase at the till, so
-// this is a register-style pad: digits, quick adders, and the remaining allowance
-// updating under your thumb as you type.
-let padValue='';
+/* ---------------- wheel ---------------- */
+// A scroll wheel, not a keyboard. Steps stay at ₪1 where cash actually lands and open
+// up higher, so any amount is a flick or two away instead of 300 rows of scrolling.
+const WHEEL_ROW = 44;
+const VALUES = (()=>{
+  const v=[];
+  for(let n=0;n<=60;n++) v.push(n);
+  for(let n=65;n<=200;n+=5) v.push(n);
+  for(let n=210;n<=1000;n+=10) v.push(n);
+  return v;
+})();
 
-function padNum(){ return parseFloat(padValue||'0')||0; }
+let wheelIndex=0;
 
-function padRender(){
-  const v=padNum();
-  const el=$('padAmt');
-  el.textContent='₪'+(padValue===''?'0':padValue);
-  el.classList.toggle('zero',v<=0);
+function buildWheel(){
+  const box=$('wheelScroll');
+  const items=VALUES.map(v=>`<div class="w-item">${v}</div>`).join('');
+  box.innerHTML='<div class="spacer"></div>'+items+'<div class="spacer"></div>';
+}
 
+function wheelValue(){ return VALUES[wheelIndex]||0; }
+
+function paintWheel(){
+  const items=$('wheelScroll').querySelectorAll('.w-item');
+  items.forEach((el,i)=>{
+    const d=Math.abs(i-wheelIndex);
+    el.className='w-item'+(d===0?' sel':d===1?' near':'');
+  });
+  const v=wheelValue();
   const c=calc(), left=Math.round(c.remaining-v);
   const box=$('padLeft');
   box.classList.toggle('over',left<0);
   box.innerHTML = v>0
-    ? (left>=0 ? `יישאר להיום <b>${fmt(left)}</b>` : `חריגה של <b>${fmt(left)}</b> מהתקרה של היום`)
+    ? (left>=0?`יישאר להיום <b>${fmt(left)}</b>`:`חריגה של <b>${fmt(left)}</b> מהתקרה של היום`)
     : `נשאר להיום <b>${fmt(Math.max(0,c.remaining))}</b>`;
   $('padSave').disabled = v<=0;
 }
 
+let wheelTick=null;
+$('wheelScroll').addEventListener('scroll',()=>{
+  if(wheelTick) return;
+  wheelTick=requestAnimationFrame(()=>{
+    wheelTick=null;
+    const i=Math.max(0,Math.min(VALUES.length-1,Math.round($('wheelScroll').scrollTop/WHEEL_ROW)));
+    if(i!==wheelIndex){ wheelIndex=i; paintWheel(); }
+  });
+});
+
+// Tapping a row is faster than dragging it into place when it's already on screen.
+$('wheelScroll').addEventListener('click',e=>{
+  const el=e.target.closest('.w-item'); if(!el) return;
+  const i=[...$('wheelScroll').querySelectorAll('.w-item')].indexOf(el);
+  $('wheelScroll').scrollTo({top:i*WHEEL_ROW,behavior:'smooth'});
+});
+
 function openPad(){
-  padValue=''; $('padDesc').value=''; padRender();
+  $('padDesc').value='';
+  wheelIndex=0;
+  $('wheelScroll').scrollTop=0;
+  paintWheel();
   $('padScrim').classList.add('open'); $('padSheet').classList.add('open');
 }
 function closePad(){ $('padScrim').classList.remove('open'); $('padSheet').classList.remove('open'); }
@@ -674,28 +692,8 @@ $('openPad').addEventListener('click',openPad);
 $('padScrim').addEventListener('click',closePad);
 $('padCancel').addEventListener('click',closePad);
 
-$('keys').addEventListener('click',e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  const k=b.dataset.k;
-  if(k==='del') padValue=padValue.slice(0,-1);
-  else if(k==='.'){ if(!padValue.includes('.')) padValue=(padValue||'0')+'.'; }
-  else if(/^\d$/.test(k)){
-    const dot=padValue.indexOf('.');
-    if(dot>=0 && padValue.length-dot>2) return;   // two decimals is as fine as money gets
-    if(padValue.replace('.','').length>=7) return;
-    padValue = padValue==='0' ? k : padValue+k;
-  }
-  padRender();
-});
-
-document.querySelector('.quick').addEventListener('click',e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  padValue=String(Math.round((padNum()+parseFloat(b.dataset.q))*100)/100);
-  padRender();
-});
-
 $('padSave').addEventListener('click',()=>{
-  const v=padNum();
+  const v=wheelValue();
   if(v<=0) return;
   const n=new Date();
   manualData.push({id:Date.now(),amt:v,desc:$('padDesc').value.trim(),ym:ymNow(),d:n.getDate()});
@@ -733,6 +731,7 @@ $('fileInput').addEventListener('change',e=>{
 
 /* ---------------- boot ---------------- */
 load();
+buildWheel();
 render();
 // The same-origin relay may hold the token server-side, so try a sync even with no
 // token pasted here — a 401 comes back with a clear reason either way.
