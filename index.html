@@ -96,11 +96,40 @@
   .inv-row .name .count{ color:var(--text-dim); font-size:11.5px; margin-inline-start:5px; }
   .inv-row .val{ font-family:'IBM Plex Mono', monospace; font-size:13.5px; color:var(--rust); direction:ltr; white-space:nowrap; }
   .inv-empty{ padding:14px; text-align:center; color:var(--text-dim); font-size:13px; }
+
+  .sync-card{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:10px; }
+  .sync-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .sync-status{ font-size:12px; color:var(--text-dim); flex:1; line-height:1.4; }
+  .sync-status.err{ color:var(--rust); }
+  .sync-status b{ color:var(--text); font-weight:500; }
+  .sync-toggle{ background:none; border:1px solid var(--line); color:var(--text-dim); border-radius:8px; padding:5px 10px; font-size:12px; font-family:'Noto Sans Hebrew', sans-serif; cursor:pointer; white-space:nowrap; }
+  .sync-settings{ margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:flex; flex-direction:column; gap:8px; }
+  .sync-settings input{ font-size:14px; }
+  .sync-note{ font-size:11.5px; color:var(--text-dim); line-height:1.5; }
+  .sync-note a{ color:var(--amber); }
 </style>
 </head>
 <body>
 <div class="app">
   <div class="eyebrow" id="dateLabel">— — —</div>
+
+  <div class="sync-card">
+    <div class="sync-head">
+      <span class="sync-status" id="syncStatus">לא מחובר ל-RiseUp</span>
+      <button class="sync-toggle" id="syncSettingsBtn">הגדרות</button>
+    </div>
+    <button class="add" id="syncBtn">משוך נתונים מ-RiseUp</button>
+    <div class="sync-settings hidden" id="syncSettings">
+      <input type="password" id="tokenInput" placeholder="riseup_pat_…" autocomplete="off" spellcheck="false">
+      <input type="text" id="baseInput" placeholder="https://input.riseup.co.il" autocomplete="off" spellcheck="false" dir="ltr">
+      <div class="sync-note">
+        טוקן נוצר ב-<span dir="ltr">input.riseup.co.il/developer/tokens</span> עם הרשאת <span dir="ltr">budget:read</span>, ומוצג פעם אחת בלבד.
+        הוא נשמר רק בדפדפן הזה ונשלח רק לכתובת שלמעלה.
+        אם הסנכרון נכשל בגלל חסימת דפדפן, הפנה את הכתובת לפרוקסי — ההוראות ב-<span dir="ltr">proxy/README.md</span>.
+      </div>
+      <button class="clear-month" id="saveCfgBtn" style="margin-top:0">שמור הגדרות</button>
+    </div>
+  </div>
 
   <label class="upload" id="uploadZone" for="fileInput">
     <div class="big" id="uploadBig">טען קובץ חודשי</div>
@@ -150,8 +179,12 @@ const DAILY = 300;
 const MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 
+const API_BASE_DEFAULT = 'https://input.riseup.co.il';
+
 let fileData = [];
 let manualData = [];
+let apiCfg = {token:'', base:''};
+let lastSync = null;
 
 function fmt(n){ const r=Math.round(n); return '₪'+Math.abs(r).toLocaleString('en-US'); }
 
@@ -261,8 +294,91 @@ function render(){
 
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1500); }
 
-function save(){ try{ localStorage.setItem('manualData',JSON.stringify(manualData)); localStorage.setItem('fileData',JSON.stringify(fileData)); }catch(e){} }
-function load(){ try{ const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m); const f=localStorage.getItem('fileData'); if(f) fileData=JSON.parse(f); }catch(e){} }
+function save(){ try{
+  localStorage.setItem('manualData',JSON.stringify(manualData));
+  localStorage.setItem('fileData',JSON.stringify(fileData));
+  localStorage.setItem('apiCfg',JSON.stringify(apiCfg));
+  localStorage.setItem('lastSync',lastSync?String(lastSync):'');
+}catch(e){} }
+function load(){ try{
+  const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m);
+  const f=localStorage.getItem('fileData'); if(f) fileData=JSON.parse(f);
+  const c=localStorage.getItem('apiCfg'); if(c) apiCfg=Object.assign({token:'',base:''},JSON.parse(c));
+  const s=localStorage.getItem('lastSync'); if(s) lastSync=parseInt(s,10)||null;
+}catch(e){} }
+
+/* ---------- RiseUp Exposed API ---------- */
+// GET {base}/api/external/transactions?cashflowMonth=YYYY-MM  with  Authorization: Bearer <PAT>
+// Transactions come back with positive amounts; isIncome carries the direction.
+
+function ymNow(){ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); }
+
+function mapApiTransactions(list){
+  const ym=ymNow(), out=[];
+  for(const t of (list||[])){
+    if(t.isIncome) continue;
+    if((t.sourceType||'')!=='creditCard') continue;
+    const amt=Math.abs(Number(t.amount));
+    if(!isFinite(amt)||amt<=0) continue;
+    // transactionDate is UTC midnight — slice the string instead of parsing, so a
+    // negative local offset can't shift the purchase back a day.
+    const iso=String(t.transactionDate||'').slice(0,10);
+    // day-of-month only when the purchase falls in the current calendar month;
+    // 0 for anything carried into this cashflow month from an earlier date, so it
+    // counts toward the month but never toward "today".
+    const d = iso.slice(0,7)===ym ? parseInt(iso.slice(8,10),10) : 0;
+    out.push({name:t.businessName||'', amt, d});
+  }
+  return out;
+}
+
+function syncConfigured(){ return !!apiCfg.token || !!apiCfg.base; }
+
+function setSyncStatus(msg,isErr){
+  const el=document.getElementById('syncStatus');
+  el.classList.toggle('err',!!isErr);
+  if(msg){ el.innerHTML=msg; return; }
+  if(!syncConfigured()){ el.textContent='לא מחובר ל-RiseUp'; return; }
+  if(!lastSync){ el.textContent='מחובר · עוד לא סונכרן'; return; }
+  const d=new Date(lastSync);
+  const t=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  const sameDay=d.toDateString()===new Date().toDateString();
+  el.innerHTML='סונכרן <b>'+(sameDay?t:d.getDate()+'/'+(d.getMonth()+1)+' '+t)+'</b> · '+fileData.length+' חיובי אשראי';
+}
+
+async function syncFromApi(silent){
+  const base=(apiCfg.base||API_BASE_DEFAULT).replace(/\/+$/,'');
+  if(!apiCfg.token && base===API_BASE_DEFAULT){
+    setSyncStatus('צריך טוקן — פתח הגדרות',true);
+    if(!silent) document.getElementById('syncSettings').classList.remove('hidden');
+    return;
+  }
+  setSyncStatus('מסנכרן…');
+  try{
+    const headers={Accept:'application/json'};
+    if(apiCfg.token) headers.Authorization='Bearer '+apiCfg.token;
+    const res=await fetch(base+'/api/external/transactions?cashflowMonth='+ymNow(),{headers});
+    if(res.status===401) throw new Error('הטוקן נדחה (401) — כנראה פג תוקף. צור חדש');
+    if(res.status===403) throw new Error('לטוקן חסרה הרשאת budget:read (403)');
+    if(res.status===429) throw new Error('יותר מדי בקשות (429) — נסה שוב בעוד דקה');
+    if(!res.ok) throw new Error('שגיאת שרת '+res.status);
+    const data=await res.json();
+    fileData=mapApiTransactions(data && data.transactions);
+    lastSync=Date.now();
+    save(); render(); updateInvestigateVisibility();
+    if(!document.getElementById('investigatePanel').classList.contains('hidden')) renderInvestigation();
+    setSyncStatus();
+    if(!silent) toast('סונכרן ✓');
+  }catch(err){
+    // fetch() rejects with TypeError on both CORS blocks and offline — the browser
+    // deliberately hides which, so the message has to cover both.
+    const msg = (err instanceof TypeError)
+      ? 'הקריאה נחסמה (CORS או אין רשת) — ראה proxy/README.md'
+      : err.message;
+    setSyncStatus('סנכרון נכשל: '+msg,true);
+    if(!silent) toast('סנכרון נכשל');
+  }
+}
 
 document.getElementById('fileInput').addEventListener('change',(e)=>{
   const file=e.target.files[0]; if(!file) return;
@@ -293,7 +409,7 @@ document.getElementById('addBtn').addEventListener('click',()=>{
 
 document.getElementById('clearBtn').addEventListener('click',()=>{
   if(confirm('למחוק את כל הנתונים? זה לא יהיה אפשר לשחזר.')){
-    manualData=[]; fileData=[]; save(); render(); updateInvestigateVisibility();
+    manualData=[]; fileData=[]; lastSync=null; save(); render(); updateInvestigateVisibility(); setSyncStatus();
     document.getElementById('investigatePanel').classList.add('hidden');
     toast('אופס למדי');
   }
@@ -371,7 +487,26 @@ function updateInvestigateVisibility(){
   else btn.classList.add('hidden');
 }
 
-load(); render(); updateInvestigateVisibility();
+document.getElementById('syncSettingsBtn').addEventListener('click',()=>{
+  document.getElementById('syncSettings').classList.toggle('hidden');
+});
+
+document.getElementById('saveCfgBtn').addEventListener('click',()=>{
+  apiCfg.token=document.getElementById('tokenInput').value.trim();
+  apiCfg.base=document.getElementById('baseInput').value.trim();
+  save(); setSyncStatus();
+  document.getElementById('syncSettings').classList.add('hidden');
+  toast('נשמר ✓');
+  if(syncConfigured()) syncFromApi();
+});
+
+document.getElementById('syncBtn').addEventListener('click',()=>syncFromApi(false));
+
+load();
+document.getElementById('tokenInput').value=apiCfg.token||'';
+document.getElementById('baseInput').value=apiCfg.base||'';
+render(); updateInvestigateVisibility(); setSyncStatus();
+if(syncConfigured()) syncFromApi(true);
 </script>
 </body>
 </html>
