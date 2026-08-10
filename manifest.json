@@ -1,0 +1,11 @@
+{
+  "name": "כמה נשאר",
+  "short_name": "כמה נשאר",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101315",
+  "theme_color": "#101315"
+}
