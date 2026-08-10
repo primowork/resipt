@@ -2,298 +2,349 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>כמה נשאר</title>
+<meta name="theme-color" content="#101315">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="כמה נשאר">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23F4EFE3'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='19' font-weight='600' text-anchor='middle' fill='%232F4F2C'%3E%E2%82%AA%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&family=Frank+Ruhl+Libre:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#14181B; --surface:#1C2226; --surface-2:#222A2F;
-    --paper:#F3EEE2; --paper-ink:#2B2620;
-    --line:#333B40; --text:#E8E4DA; --text-dim:#9AA3A8;
-    --amber:#D9A24B; --rust:#C2542F; --green:#7C9A6E;
+    --bg:#101315; --bg-2:#161A1D;
+    --surface:#191E21; --surface-2:#212729; --line:#2C3438; --line-soft:#242B2F;
+    --paper:#F4EFE3; --paper-2:#EAE3D3; --ink:#26221C; --ink-dim:#7C7361;
+    --text:#EDE9DF; --dim:#98A1A6; --dim-2:#6E777C;
+    --amber:#E0A64F; --rust:#CB5B3C; --green:#84A472;
+    --radius:16px;
+    --safe-b:env(safe-area-inset-bottom, 0px);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;}
+  html,body{margin:0; padding:0;}
   body{
     background:var(--bg); color:var(--text);
-    font-family:'Noto Sans Hebrew', sans-serif;
+    font-family:'Assistant', sans-serif; font-size:15px; line-height:1.5;
     min-height:100vh; display:flex; justify-content:center;
-    padding:18px 12px 48px;
+    padding:0 0 calc(96px + var(--safe-b));
+    /* two soft pools of light so the ground isn't a flat fill */
+    background-image:
+      radial-gradient(120% 60% at 80% -10%, rgba(224,166,79,.09), transparent 60%),
+      radial-gradient(90% 50% at 0% 100%, rgba(132,164,114,.055), transparent 60%);
+    background-attachment:fixed;
   }
-  .app{ width:100%; max-width:440px; }
-  .eyebrow{ font-size:12px; letter-spacing:.5px; color:var(--text-dim); margin:2px 4px 12px; font-family:'IBM Plex Mono', monospace; }
-
-  .upload{
-    border:1.5px dashed var(--line); border-radius:14px; padding:14px; text-align:center;
-    cursor:pointer; background:var(--surface); transition:all .2s; margin-bottom:14px;
-  }
-  .upload:active{ border-color:var(--amber); }
-  .upload .big{ font-size:14px; font-weight:600; color:var(--text); margin-bottom:2px; }
-  .upload .small{ font-size:11.5px; color:var(--text-dim); }
-  .upload.loaded .big{ color:var(--green); }
-  input[type=file]{ display:none; }
-
-  .receipt{
-    background:var(--paper); color:var(--paper-ink);
-    border-radius:10px 10px 0 0; padding:22px 22px 18px; text-align:center;
-    box-shadow:0 14px 30px -10px rgba(0,0,0,.55);
-  }
-  .receipt .label{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:#6b6354; margin-bottom:6px; }
-  .receipt .amount{ font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:54px; line-height:1; letter-spacing:-1px; direction:ltr; }
-  .receipt .amount.neg{ color:var(--rust); }
-  .receipt .amount.pos{ color:#3d6b3a; }
-  .receipt .sub{ font-size:12.5px; color:#7a7261; margin-top:8px; }
-  .receipt .sub b{ color:var(--paper-ink); font-weight:600; }
-  .perf{ height:14px; background:var(--paper); position:relative; margin-bottom:16px; }
-  .perf::before{ content:''; position:absolute; left:0; right:0; bottom:0; height:14px; background:radial-gradient(circle at 7px 0, transparent 7px, var(--bg) 7.5px); background-size:14px 14px; background-repeat:repeat-x; }
-
-  .form-card{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:8px; }
-  .row{ display:flex; gap:8px; margin-bottom:10px; }
-  input[type=number], input[type=text]{
-    background:var(--surface-2); border:1px solid var(--line); color:var(--text);
-    border-radius:9px; padding:12px; font-size:15px; font-family:'Noto Sans Hebrew', sans-serif; width:100%;
-  }
-  input[type=number]{ font-family:'IBM Plex Mono', monospace; direction:ltr; text-align:center; max-width:104px; }
-  input::placeholder{ color:var(--text-dim); }
-  input:focus{ outline:2px solid var(--amber); outline-offset:0; }
-  button.add{
-    width:100%; background:var(--amber); color:#22180b; border:none;
-    border-radius:9px; padding:13px; font-size:15px; font-weight:600;
-    font-family:'Noto Sans Hebrew', sans-serif; cursor:pointer;
-  }
-  button.add:active{ transform:scale(.98); }
-  button.clear-month{
-    width:100%; background:var(--surface); color:var(--text-dim); border:1px solid var(--line);
-    border-radius:9px; padding:10px; font-size:13px; font-family:'Noto Sans Hebrew', sans-serif; cursor:pointer; margin-top:8px;
-  }
-
-  .section-title{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); margin:18px 4px 8px; }
-  .ledger{ background:var(--surface); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
-  .entry{ display:flex; align-items:center; justify-content:space-between; padding:11px 14px; border-bottom:1px dashed var(--line); gap:10px; }
-  .entry:last-child{ border-bottom:none; }
-  .entry .desc{ font-size:14px; color:var(--text); flex:1; }
-  .entry .amt{ font-family:'IBM Plex Mono', monospace; font-size:14.5px; color:var(--rust); direction:ltr; }
-  .entry .del{ background:none; border:none; color:var(--text-dim); font-size:15px; cursor:pointer; padding:4px 6px; line-height:1; width:22px; text-align:center; }
-  .entry .del:active{ color:var(--rust); }
-  .empty{ padding:22px 14px; text-align:center; color:var(--text-dim); font-size:13.5px; }
-
-  .summary{ margin-top:16px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 16px; display:flex; flex-direction:column; gap:9px; }
-  .summary .line{ display:flex; justify-content:space-between; align-items:center; font-size:13.5px; color:var(--text-dim); }
-  .summary .line b{ font-family:'IBM Plex Mono', monospace; color:var(--text); font-weight:500; direction:ltr; }
-  .summary .line b.over{ color:var(--rust); }
-  .summary .line b.under{ color:var(--green); }
-
-  .toast{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--surface-2); border:1px solid var(--line); color:var(--text); padding:9px 16px; border-radius:20px; font-size:12.5px; opacity:0; transition:opacity .25s; pointer-events:none; z-index:999; }
-  .toast.show{ opacity:1; }
+  .app{ width:100%; max-width:460px; padding:0 14px; }
   .hidden{ display:none !important; }
+  button{ font-family:inherit; cursor:pointer; }
 
-  .inv-section{ padding:12px 14px 6px; }
-  .inv-title{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px; }
-  .inv-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px dashed var(--line); gap:10px; }
-  .inv-row:last-child{ border-bottom:none; }
-  .inv-row .name{ font-size:13.5px; color:var(--text); flex:1; }
-  .inv-row .name .count{ color:var(--text-dim); font-size:11.5px; margin-inline-start:5px; }
-  .inv-row .val{ font-family:'IBM Plex Mono', monospace; font-size:13.5px; color:var(--rust); direction:ltr; white-space:nowrap; }
-  .inv-empty{ padding:14px; text-align:center; color:var(--text-dim); font-size:13px; }
+  /* staggered entrance */
+  @keyframes riseIn{ from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:none;} }
+  .stagger>*{ animation:riseIn .5s cubic-bezier(.2,.7,.3,1) both; }
+  .stagger>*:nth-child(1){animation-delay:.02s} .stagger>*:nth-child(2){animation-delay:.07s}
+  .stagger>*:nth-child(3){animation-delay:.12s} .stagger>*:nth-child(4){animation-delay:.17s}
+  .stagger>*:nth-child(5){animation-delay:.22s} .stagger>*:nth-child(6){animation-delay:.27s}
+  @media (prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important;} }
 
-  .sync-card{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:10px; }
-  .sync-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
-  .sync-status{ font-size:12px; color:var(--text-dim); flex:1; line-height:1.4; }
-  .sync-status.err{ color:var(--rust); }
-  .sync-status b{ color:var(--text); font-weight:500; }
-  .sync-toggle{ background:none; border:1px solid var(--line); color:var(--text-dim); border-radius:8px; padding:5px 10px; font-size:12px; font-family:'Noto Sans Hebrew', sans-serif; cursor:pointer; white-space:nowrap; }
-  .sync-settings{ margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:flex; flex-direction:column; gap:8px; }
-  .sync-settings input{ font-size:14px; }
-  .sync-note{ font-size:11.5px; color:var(--text-dim); line-height:1.5; }
-  .sync-note a{ color:var(--amber); }
+  /* ---------- top bar ---------- */
+  .top{ display:flex; align-items:center; gap:10px; padding:16px 2px 14px; }
+  .brand{ font-family:'Frank Ruhl Libre', serif; font-weight:700; font-size:19px; letter-spacing:-.2px; }
+  .brand small{ display:block; font-family:'IBM Plex Mono', monospace; font-weight:400;
+    font-size:10.5px; letter-spacing:.6px; color:var(--dim-2); margin-top:1px; }
+  .top-sp{ flex:1; }
+  .chip{
+    display:inline-flex; align-items:center; gap:6px; background:var(--surface);
+    border:1px solid var(--line); border-radius:999px; padding:6px 11px 6px 9px;
+    font-size:11.5px; color:var(--dim); max-width:190px; transition:border-color .2s;
+  }
+  .chip .dot{ width:6px; height:6px; border-radius:50%; background:var(--dim-2); flex:none; }
+  .chip .txt{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chip.ok .dot{ background:var(--green); box-shadow:0 0 0 3px rgba(132,164,114,.16); }
+  .chip.busy .dot{ background:var(--amber); animation:pulse 1s ease-in-out infinite; }
+  .chip.err{ border-color:rgba(203,91,60,.5); color:#E8A18B; }
+  .chip.err .dot{ background:var(--rust); }
+  @keyframes pulse{ 50%{opacity:.25;} }
+  .icon-btn{
+    width:36px; height:36px; flex:none; display:grid; place-items:center;
+    background:var(--surface); border:1px solid var(--line); border-radius:11px;
+    color:var(--dim); font-size:15px; transition:transform .15s, color .2s;
+  }
+  .icon-btn:active{ transform:scale(.92); color:var(--text); }
+
+  /* ---------- receipt hero ---------- */
+  .receipt-wrap{ filter:drop-shadow(0 18px 34px rgba(0,0,0,.5)); margin-bottom:18px; }
+  .receipt{
+    background:var(--paper); color:var(--ink); padding:24px 22px 20px; text-align:center;
+    position:relative; overflow:hidden;
+    /* torn top + bottom edge, cut straight out of the paper */
+    -webkit-mask:
+      radial-gradient(circle at 7px 7px, transparent 6.5px, #000 7px) -7px 0/14px 14px repeat-x,
+      radial-gradient(circle at 7px 7px, transparent 6.5px, #000 7px) -7px 100%/14px 14px repeat-x,
+      linear-gradient(#000,#000) 0 7px/100% calc(100% - 14px) no-repeat;
+    mask:
+      radial-gradient(circle at 7px 7px, transparent 6.5px, #000 7px) -7px 0/14px 14px repeat-x,
+      radial-gradient(circle at 7px 7px, transparent 6.5px, #000 7px) -7px 100%/14px 14px repeat-x,
+      linear-gradient(#000,#000) 0 7px/100% calc(100% - 14px) no-repeat;
+  }
+  /* paper grain */
+  .receipt::before{
+    content:''; position:absolute; inset:0; pointer-events:none; opacity:.5;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E");
+  }
+  .receipt>*{ position:relative; }
+  .r-label{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:2px;
+    text-transform:uppercase; color:var(--ink-dim); }
+  .r-amount{
+    font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:clamp(52px, 17vw, 68px);
+    line-height:1; letter-spacing:-2px; direction:ltr; margin:10px 0 4px; color:#2F4F2C;
+  }
+  .r-amount.neg{ color:var(--rust); }
+  .r-of{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-dim); direction:ltr; }
+
+  .meter{ height:5px; border-radius:3px; background:rgba(38,34,28,.12); margin:16px 0 12px; overflow:hidden; }
+  .meter i{ display:block; height:100%; width:0; border-radius:3px; background:#4A6B45;
+    transition:width .7s cubic-bezier(.2,.7,.3,1), background-color .3s; }
+  .meter.over i{ background:var(--rust); }
+
+  .r-split{ display:flex; border-top:1px dashed rgba(38,34,28,.22); padding-top:12px; }
+  .r-split div{ flex:1; }
+  .r-split div+div{ border-inline-start:1px dashed rgba(38,34,28,.22); }
+  .r-split .k{ font-size:11px; color:var(--ink-dim); margin-bottom:3px; }
+  .r-split .v{ font-family:'IBM Plex Mono', monospace; font-size:15px; font-weight:500; direction:ltr; }
+
+  /* ---------- cards ---------- */
+  .card{ background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--radius); }
+  .sec{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:1.4px;
+    text-transform:uppercase; color:var(--dim-2); margin:22px 6px 9px; display:flex;
+    align-items:center; justify-content:space-between; gap:8px; }
+  .sec button{ background:none; border:none; color:var(--amber); font-family:'Assistant',sans-serif;
+    font-size:12px; letter-spacing:0; text-transform:none; padding:2px 0; }
+
+  /* ledger */
+  .entry{ display:flex; align-items:center; gap:12px; padding:13px 15px; border-bottom:1px dashed var(--line-soft); }
+  .entry:last-child{ border-bottom:none; }
+  .entry .desc{ flex:1; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .entry .amt{ font-family:'IBM Plex Mono', monospace; font-size:14.5px; color:#E2937C; direction:ltr; }
+  .entry .del{ background:none; border:none; color:var(--dim-2); font-size:16px; line-height:1;
+    padding:2px 4px; transition:color .2s; }
+  .entry .del:active{ color:var(--rust); }
+  .empty{ padding:26px 16px; text-align:center; color:var(--dim-2); font-size:13.5px; }
+
+  /* stat tiles */
+  .tiles{ display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+  .tile{ background:var(--surface); border:1px solid var(--line-soft); border-radius:13px; padding:13px 14px; }
+  .tile .k{ font-size:11.5px; color:var(--dim-2); margin-bottom:5px; }
+  .tile .v{ font-family:'IBM Plex Mono', monospace; font-size:19px; font-weight:500; direction:ltr; letter-spacing:-.5px; }
+  .tile .v.over{ color:var(--rust); } .tile .v.under{ color:var(--green); }
+  .tile .n{ font-size:11px; color:var(--dim-2); margin-top:3px; }
+
+  .note{ display:flex; gap:11px; align-items:flex-start; padding:13px 15px; margin-top:10px;
+    background:rgba(224,166,79,.07); border:1px solid rgba(224,166,79,.28); border-radius:13px;
+    font-size:13px; color:#E7CDA0; line-height:1.55; }
+  .note.hot{ background:rgba(203,91,60,.08); border-color:rgba(203,91,60,.35); color:#EFB49E; }
+  .note .ic{ font-size:15px; line-height:1.3; }
+
+  /* onboarding */
+  .onboard{ background:linear-gradient(160deg, rgba(224,166,79,.14), rgba(224,166,79,.04));
+    border:1px solid rgba(224,166,79,.3); border-radius:var(--radius); padding:16px; margin-bottom:16px; }
+  .onboard h2{ margin:0 0 6px; font-family:'Frank Ruhl Libre',serif; font-size:17px; font-weight:700; }
+  .onboard p{ margin:0 0 13px; font-size:13.5px; color:var(--dim); line-height:1.6; }
+
+  /* buttons */
+  .btn{ display:block; width:100%; border:none; border-radius:12px; padding:14px;
+    font-size:15px; font-weight:600; transition:transform .12s, filter .2s; }
+  .btn:active{ transform:scale(.985); }
+  .btn-primary{ background:linear-gradient(180deg, #EBB35C, var(--amber)); color:#241704;
+    box-shadow:0 6px 18px -8px rgba(224,166,79,.7); }
+  .btn-ghost{ background:var(--surface-2); border:1px solid var(--line); color:var(--text); font-weight:500; }
+  .btn-quiet{ background:none; border:1px solid var(--line); color:var(--dim); font-size:13.5px;
+    font-weight:500; padding:11px; }
+  .btn-danger{ background:none; border:1px solid rgba(203,91,60,.4); color:#DD8B72; font-size:13.5px;
+    font-weight:500; padding:11px; }
+
+  /* ---------- add bar (fixed) ---------- */
+  .addbar{
+    position:fixed; bottom:0; left:0; right:0; z-index:60;
+    padding:10px 14px calc(10px + var(--safe-b));
+    background:linear-gradient(to top, var(--bg) 62%, rgba(16,19,21,0));
+  }
+  .addbar-inner{ max-width:460px; margin:0 auto; display:flex; gap:8px; align-items:center;
+    background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:7px;
+    box-shadow:0 12px 30px -12px rgba(0,0,0,.8); }
+  .addbar input{ background:none; border:none; color:var(--text); font-family:'Assistant',sans-serif;
+    font-size:15px; padding:9px 8px; min-width:0; }
+  .addbar input:focus{ outline:none; }
+  .addbar .amt{ font-family:'IBM Plex Mono', monospace; direction:ltr; text-align:center; width:82px;
+    flex:none; background:var(--surface-2); border-radius:10px; font-size:16px; }
+  .addbar .what{ flex:1; }
+  .addbar input::placeholder{ color:var(--dim-2); }
+  .addbar .go{ flex:none; width:44px; height:40px; border:none; border-radius:11px;
+    background:var(--amber); color:#241704; font-size:20px; font-weight:600; line-height:1;
+    display:grid; place-items:center; transition:transform .12s, opacity .2s; }
+  .addbar .go:active{ transform:scale(.92); }
+  .addbar .go:disabled{ opacity:.4; }
+
+  /* ---------- settings sheet ---------- */
+  .scrim{ position:fixed; inset:0; background:rgba(8,10,11,.72); backdrop-filter:blur(3px);
+    z-index:80; opacity:0; pointer-events:none; transition:opacity .25s; }
+  .scrim.open{ opacity:1; pointer-events:auto; }
+  .sheet{
+    position:fixed; z-index:90; left:0; right:0; bottom:0; max-height:88vh; overflow-y:auto;
+    background:var(--bg-2); border-top:1px solid var(--line);
+    border-radius:22px 22px 0 0; padding:8px 16px calc(24px + var(--safe-b));
+    transform:translateY(100%); transition:transform .3s cubic-bezier(.2,.7,.3,1);
+    max-width:460px; margin:0 auto;
+  }
+  .sheet.open{ transform:none; }
+  .grab{ width:38px; height:4px; border-radius:2px; background:var(--line); margin:6px auto 14px; }
+  .sheet h3{ margin:0 0 4px; font-family:'Frank Ruhl Libre',serif; font-size:18px; }
+  .sheet .lead{ margin:0 0 16px; font-size:13px; color:var(--dim); line-height:1.6; }
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:12.5px; color:var(--dim); margin-bottom:6px; }
+  .field input{ width:100%; background:var(--surface); border:1px solid var(--line); color:var(--text);
+    border-radius:11px; padding:13px; font-size:15px; font-family:'Assistant',sans-serif; }
+  .field input:focus{ outline:none; border-color:var(--amber); }
+  .field .hint{ font-size:11.5px; color:var(--dim-2); margin-top:6px; line-height:1.55; }
+  .field .hint a{ color:var(--amber); }
+  .steps{ counter-reset:s; margin:0 0 16px; padding:0; list-style:none; }
+  .steps li{ counter-increment:s; position:relative; padding-inline-start:28px; margin-bottom:9px;
+    font-size:13.5px; color:var(--dim); line-height:1.55; }
+  .steps li::before{ content:counter(s); position:absolute; inset-inline-start:0; top:1px;
+    width:19px; height:19px; border-radius:50%; background:var(--surface-2); color:var(--amber);
+    font-family:'IBM Plex Mono',monospace; font-size:11px; display:grid; place-items:center; }
+  .steps b{ color:var(--text); font-weight:600; }
+  .adv{ border-top:1px solid var(--line-soft); margin-top:18px; padding-top:14px; }
+  .adv summary{ font-size:13px; color:var(--dim-2); cursor:pointer; list-style:none; padding:4px 0; }
+  .adv summary::-webkit-details-marker{ display:none; }
+  .adv summary::before{ content:'▸ '; }
+  .adv[open] summary::before{ content:'▾ '; }
+  .adv .body{ padding-top:14px; }
+  .filebtn{ display:block; text-align:center; }
+  input[type=file]{ display:none; }
+  .stack{ display:flex; flex-direction:column; gap:9px; }
+
+  .toast{ position:fixed; bottom:calc(84px + var(--safe-b)); left:50%; transform:translateX(-50%) translateY(8px);
+    background:var(--surface-2); border:1px solid var(--line); color:var(--text); padding:10px 18px;
+    border-radius:999px; font-size:13px; opacity:0; transition:opacity .25s, transform .25s;
+    pointer-events:none; z-index:200; box-shadow:0 10px 24px -12px #000; }
+  .toast.show{ opacity:1; transform:translateX(-50%); }
 </style>
 </head>
 <body>
-<div class="app">
-  <div class="eyebrow" id="dateLabel">— — —</div>
 
-  <div class="sync-card">
-    <div class="sync-head">
-      <span class="sync-status" id="syncStatus">לא מחובר ל-RiseUp</span>
-      <button class="sync-toggle" id="syncSettingsBtn">הגדרות</button>
-    </div>
-    <button class="add" id="syncBtn">משוך נתונים מ-RiseUp</button>
-    <div class="sync-settings hidden" id="syncSettings">
-      <input type="password" id="tokenInput" placeholder="riseup_pat_…" autocomplete="off" spellcheck="false">
-      <input type="text" id="baseInput" placeholder="https://input.riseup.co.il" autocomplete="off" spellcheck="false" dir="ltr">
-      <div class="sync-note">
-        טוקן נוצר ב-<span dir="ltr">input.riseup.co.il/developer/tokens</span> עם הרשאת <span dir="ltr">budget:read</span>, ומוצג פעם אחת בלבד.
-        הוא נשמר רק בדפדפן הזה ונשלח רק לכתובת שלמעלה.
-        אם הסנכרון נכשל בגלל חסימת דפדפן, הפנה את הכתובת לפרוקסי — ההוראות ב-<span dir="ltr">proxy/README.md</span>.
+<div class="app stagger">
+
+  <div class="top">
+    <div class="brand">כמה נשאר<small id="dateLabel">— — —</small></div>
+    <div class="top-sp"></div>
+    <button class="chip" id="statusChip" aria-live="polite"><span class="dot"></span><span class="txt" id="statusText">לא מחובר</span></button>
+    <button class="icon-btn" id="openSettings" aria-label="הגדרות">⚙</button>
+  </div>
+
+  <div class="onboard hidden" id="onboard">
+    <h2>חבר את RiseUp</h2>
+    <p>במקום לטעון קובץ כל חודש, האפליקציה תמשוך את חיובי האשראי שלך לבד — בכל פעם שתפתח אותה.</p>
+    <button class="btn btn-primary" id="onboardBtn">מתחילים</button>
+  </div>
+
+  <div class="receipt-wrap">
+    <div class="receipt">
+      <div class="r-label">נשאר להיום</div>
+      <div class="r-amount" id="remainingToday">₪300</div>
+      <div class="r-of" id="ceilingLine">מתוך ₪300</div>
+      <div class="meter" id="meter"><i></i></div>
+      <div class="r-split">
+        <div><div class="k">הוצאת היום</div><div class="v" id="spentToday">₪0</div></div>
+        <div><div class="k">החודש</div><div class="v" id="monthSpent">₪0</div></div>
+        <div><div class="k">ימים שנותרו</div><div class="v" id="daysLeft">—</div></div>
       </div>
-      <button class="clear-month" id="saveCfgBtn" style="margin-top:0">שמור הגדרות</button>
     </div>
   </div>
 
-  <label class="upload" id="uploadZone" for="fileInput">
-    <div class="big" id="uploadBig">טען קובץ חודשי</div>
-    <div class="small" id="uploadSmall">בסיס החודש מהאפליקציה</div>
-    <input type="file" id="fileInput" accept=".csv,text/csv">
-  </label>
-
-  <button class="clear-month hidden" id="investigateBtn" style="margin-bottom:14px; background:var(--surface-2); color:var(--amber); border-color:var(--amber);">🔍 תחקיר החודש</button>
-
-  <div class="ledger hidden" id="investigatePanel" style="margin-bottom:16px;"></div>
-
-  <div class="receipt">
-    <div class="label">נשאר להיום</div>
-    <div class="amount pos" id="remainingToday">₪300</div>
-    <div class="sub" id="todaySub">מתקרה דינמית <b>₪300</b></div>
+  <div>
+    <div class="sec">הוצאות היום</div>
+    <div class="card" id="todayList"><div class="empty">עוד לא יצא כסף היום</div></div>
   </div>
-  <div class="perf"></div>
 
-  <div class="form-card">
-    <div class="row">
-      <input type="number" id="amountInput" placeholder="₪0" inputmode="decimal" step="0.01">
-      <input type="text" id="descInput" placeholder="על מה?">
+  <div>
+    <div class="sec">החודש<button id="investigateBtn" class="hidden">תחקיר ›</button></div>
+    <div class="tiles">
+      <div class="tile"><div class="k">ממוצע יומי</div><div class="v" id="avgDaily">₪0</div><div class="n" id="avgNote">מול ₪300 ליום</div></div>
+      <div class="tile"><div class="k">מול הקצב</div><div class="v" id="monthDelta">—</div><div class="n" id="deltaNote">מתחילת החודש</div></div>
     </div>
-    <button class="add" id="addBtn">הוסף</button>
-    <button class="clear-month" id="clearBtn">אפס חודש חדש</button>
+    <div class="card hidden" id="investigatePanel" style="margin-top:9px;"></div>
+    <div class="note hidden" id="rateWarning"></div>
   </div>
 
-  <div class="section-title">הוצאות היום</div>
-  <div class="ledger" id="todayList">
-    <div class="empty">אין הוצאות היום</div>
-  </div>
-
-  <div class="summary">
-    <div class="line"><span>הוצאת החודש בויזה</span><b id="monthSpent">₪0</b></div>
-    <div class="line"><span>ממוצע יומי</span><b id="avgDaily">₪0</b></div>
-    <div class="line"><span>פער מ-300 ליום</span><b id="monthDelta">—</b></div>
-    <div class="line"><span>ימים שנותרו</span><b id="daysLeft">—</b></div>
-  </div>
-
-  <div class="ledger hidden" id="rateWarning" style="margin-top:10px;"></div>
-
-  <div class="toast" id="toast"></div>
 </div>
+
+<div class="addbar">
+  <div class="addbar-inner">
+    <input class="amt" type="number" id="amountInput" placeholder="₪" inputmode="decimal" step="0.01">
+    <input class="what" type="text" id="descInput" placeholder="הוצאה במזומן — על מה?">
+    <button class="go" id="addBtn" aria-label="הוסף">+</button>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-label="הגדרות">
+  <div class="grab"></div>
+  <h3>חיבור ל-RiseUp</h3>
+  <p class="lead" id="sheetStatus">האפליקציה מושכת את חיובי האשראי של החודש ישירות מהתזרים שלך.</p>
+
+  <ol class="steps">
+    <li>פותחים את <a href="https://input.riseup.co.il/developer/tokens" target="_blank" rel="noopener" style="color:var(--amber)">עמוד הטוקנים של RiseUp</a></li>
+    <li>יוצרים טוקן עם ההרשאה <b>budget:read</b></li>
+    <li>מדביקים אותו כאן — הוא מוצג פעם אחת בלבד</li>
+  </ol>
+
+  <div class="field">
+    <label for="tokenInput">טוקן אישי</label>
+    <input type="password" id="tokenInput" placeholder="riseup_pat_…" autocomplete="off" spellcheck="false" dir="ltr">
+    <div class="hint">נשמר רק במכשיר הזה. הטוקן פג אחרי 30 יום — אז פשוט צור חדש והדבק שוב.</div>
+  </div>
+
+  <div class="stack">
+    <button class="btn btn-primary" id="saveCfgBtn">שמור וסנכרן</button>
+    <button class="btn btn-ghost" id="syncBtn">משוך נתונים עכשיו</button>
+  </div>
+
+  <details class="adv">
+    <summary>אפשרויות נוספות</summary>
+    <div class="body">
+      <div class="field">
+        <label for="baseInput">כתובת שרת</label>
+        <input type="text" id="baseInput" placeholder="ברירת מחדל — השרת של האפליקציה" autocomplete="off" spellcheck="false" dir="ltr">
+        <div class="hint">ריק = דרך השרת שמגיש את הדף (מומלץ). שנה רק אם אתה מפנה לפרוקסי אחר.</div>
+      </div>
+      <div class="stack">
+        <label class="btn btn-quiet filebtn" for="fileInput" id="fileLabel">טען קובץ CSV במקום</label>
+        <input type="file" id="fileInput" accept=".csv,text/csv">
+        <button class="btn btn-danger" id="clearBtn">מחק הכל והתחל חודש חדש</button>
+      </div>
+    </div>
+  </details>
+</div>
+
+<div class="toast" id="toast"></div>
 
 <script>
 const DAILY = 300;
 const MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
-
-const API_BASE_DEFAULT = 'https://input.riseup.co.il';
+const TOKENS_URL = 'https://input.riseup.co.il/developer/tokens';
 
 let fileData = [];
 let manualData = [];
 let apiCfg = {token:'', base:''};
 let lastSync = null;
 
-function fmt(n){ const r=Math.round(n); return '₪'+Math.abs(r).toLocaleString('en-US'); }
+const $ = id => document.getElementById(id);
+function fmt(n){ return '₪'+Math.abs(Math.round(n)).toLocaleString('en-US'); }
 
-function parseCSV(text){
-  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
-  const rows=[]; let f='',r=[],q=false;
-  for(let i=0;i<text.length;i++){
-    const c=text[i];
-    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
-    else{ if(c==='"')q=true; else if(c===','){r.push(f);f='';} else if(c==='\n'){r.push(f);rows.push(r);r=[];f='';} else if(c!=='\r') f+=c; }
-  }
-  if(f.length||r.length){ r.push(f); rows.push(r); }
-  return rows;
-}
-
-function parseDMY(s){ const m=(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m?new Date(+m[3],+m[2]-1,+m[1]):null; }
-
-function ingestCSV(rows){
-  const h=rows[0], idx={}; h.forEach((x,i)=>idx[x.trim()]=i);
-  const now=new Date(), cy=now.getFullYear(), cm=now.getMonth();
-  const out=[];
-  for(let i=1;i<rows.length;i++){
-    const row=rows[i]; if(!row||row.length<h.length) continue;
-    const src=(row[idx['סוג מקור']]||'').trim();
-    if(src!=='creditCard') continue;
-    const ex=(row[idx['האם מוחרג מהתזרים?']]||'').trim();
-    if(ex.toLowerCase()==='true') continue;
-    const amt=parseFloat(row[idx['סכום']]); if(isNaN(amt)||amt>=0) continue;
-    const d=parseDMY(row[idx['תאריך התשלום']]);
-    if(!d||d.getFullYear()!==cy||d.getMonth()!==cm) continue;
-    out.push({name:row[idx['שם העסק']]||'',amt:Math.abs(amt),d:d.getDate()});
-  }
-  fileData=out;
-}
-
-function calc(){
-  const now=new Date(), y=now.getFullYear(), m=now.getMonth(), dom=now.getDate();
-  const daysInMonth=new Date(y,m+1,0).getDate();
-
-  let allToday=fileData.filter(x=>x.d===dom);
-  for(let entry of manualData) allToday.push({name:entry.desc||'הוצאה',amt:entry.amt,manual:true,id:entry.id});
-
-  const spentToday=allToday.reduce((s,x)=>s+x.amt,0);
-  const spentMonth=fileData.reduce((s,x)=>s+x.amt,0)+manualData.reduce((s,x)=>s+x.amt,0);
-  const daysLeft=daysInMonth-dom;
-  
-  const totalBudget=DAILY*daysInMonth;
-  const dynamicCeiling=Math.min(DAILY, daysLeft>0?(totalBudget-spentMonth)/daysLeft:0);
-  
-  const remaining=dynamicCeiling-spentToday;
-  const avg=dom>0?spentMonth/dom:0;
-  const budgetSoFar=DAILY*dom;
-  const delta=budgetSoFar-spentMonth;
-
-  // rate of ceiling decline: based on actual days with recorded data, not calendar day number
-  // this matters if tracking started mid-month rather than day 1
-  const allDayNums = fileData.map(x=>x.d);
-  const firstDataDay = allDayNums.length ? Math.min(...allDayNums) : dom;
-  const elapsedDays = Math.max(1, dom - firstDataDay + 1);
-  const declinePerDay = (DAILY-dynamicCeiling)/elapsedDays;
-  const daysUntilZero = declinePerDay>0 ? Math.floor(dynamicCeiling/declinePerDay) : null;
-
-  return {now,y,m,dom,daysInMonth,remaining,spentToday,spentMonth,allToday,avg,delta,daysLeft,dynamicCeiling,declinePerDay,daysUntilZero,elapsedDays};
-}
-
-function render(){
-  const c=calc();
-  
-  document.getElementById('dateLabel').textContent=`יום ${DAYS[c.now.getDay()]} · ${c.dom} ב${MONTHS[c.m]}`;
-
-  const amt=document.getElementById('remainingToday');
-  amt.textContent=fmt(Math.max(0,Math.round(c.remaining)));
-  amt.className=c.remaining<0?'amount neg':'amount pos';
-  
-  document.getElementById('todaySub').innerHTML=`מתקרה דינמית <b>₪${Math.round(c.dynamicCeiling)}</b> · הוצאת היום <b>${fmt(c.spentToday)}</b>`;
-
-  const list=document.getElementById('todayList');
-  if(c.allToday.length===0) list.innerHTML='<div class="empty">אין הוצאות היום</div>';
-  else list.innerHTML=c.allToday.map(x=>`<div class="entry">${x.manual?`<button class="del" data-id="${x.id}">✕</button>`:'<span></span>'}<span class="amt">-${fmt(x.amt).slice(1)}</span><span class="desc">${x.name}</span></div>`).join('');
-
-  document.getElementById('monthSpent').textContent=fmt(c.spentMonth);
-  
-  const avgEl=document.getElementById('avgDaily');
-  avgEl.textContent=fmt(c.avg);
-  avgEl.parentElement.classList.toggle('over',c.avg>DAILY);
-  
-  const dEl=document.getElementById('monthDelta');
-  dEl.textContent=(c.delta>=0?'+':'')+fmt(c.delta)+' מהקצב המקורי';
-  dEl.classList=c.delta<0?'over':'under';
-  
-  document.getElementById('daysLeft').textContent=c.daysLeft;
-
-  const warnEl=document.getElementById('rateWarning');
-  if(c.dynamicCeiling>=DAILY || c.daysUntilZero===null){
-    warnEl.classList.add('hidden');
-  } else {
-    warnEl.classList.remove('hidden');
-    const urgent = c.daysUntilZero <= c.daysLeft;
-    const msg = urgent
-      ? `התקרה יורדת בכ-₪${Math.round(c.declinePerDay)} ליום. בקצב הזה היא מגיעה ל-0 בעוד כ-${c.daysUntilZero} ימים, לפני שהחודש נגמר`
-      : `התקרה יורדת בכ-₪${Math.round(c.declinePerDay)} ליום. בקצב הזה היא הייתה מגיעה ל-0 בעוד כ-${c.daysUntilZero} ימים, אבל החודש נגמר קודם`;
-    warnEl.innerHTML = `<div class="inv-section"><div class="inv-title">קצב ירידה</div>
-      <div class="inv-row"><span class="val" style="color:${urgent?'var(--rust)':'var(--amber)'}">${c.daysUntilZero} ימים</span>
-      <span class="name">${msg}</span></div></div>`;
-  }
-}
-
-function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1500); }
-
+/* ---------------- storage ---------------- */
 function save(){ try{
   localStorage.setItem('manualData',JSON.stringify(manualData));
   localStorage.setItem('fileData',JSON.stringify(fileData));
@@ -307,10 +358,39 @@ function load(){ try{
   const s=localStorage.getItem('lastSync'); if(s) lastSync=parseInt(s,10)||null;
 }catch(e){} }
 
-/* ---------- RiseUp Exposed API ---------- */
-// GET {base}/api/external/transactions?cashflowMonth=YYYY-MM  with  Authorization: Bearer <PAT>
-// Transactions come back with positive amounts; isIncome carries the direction.
+/* ---------------- CSV (fallback path) ---------------- */
+function parseCSV(text){
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+  const rows=[]; let f='',r=[],q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else{ if(c==='"')q=true; else if(c===','){r.push(f);f='';} else if(c==='\n'){r.push(f);rows.push(r);r=[];f='';} else if(c!=='\r') f+=c; }
+  }
+  if(f.length||r.length){ r.push(f); rows.push(r); }
+  return rows;
+}
+function parseDMY(s){ const m=(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m?new Date(+m[3],+m[2]-1,+m[1]):null; }
+function ingestCSV(rows){
+  const h=rows[0], idx={}; h.forEach((x,i)=>idx[x.trim()]=i);
+  const now=new Date(), cy=now.getFullYear(), cm=now.getMonth();
+  const out=[];
+  for(let i=1;i<rows.length;i++){
+    const row=rows[i]; if(!row||row.length<h.length) continue;
+    if((row[idx['סוג מקור']]||'').trim()!=='creditCard') continue;
+    if((row[idx['האם מוחרג מהתזרים?']]||'').trim().toLowerCase()==='true') continue;
+    const amt=parseFloat(row[idx['סכום']]); if(isNaN(amt)||amt>=0) continue;
+    const d=parseDMY(row[idx['תאריך התשלום']]);
+    if(!d||d.getFullYear()!==cy||d.getMonth()!==cm) continue;
+    out.push({name:row[idx['שם העסק']]||'',amt:Math.abs(amt),d:d.getDate()});
+  }
+  fileData=out;
+}
 
+/* ---------------- RiseUp API ---------------- */
+// Default path is same-origin (/api/riseup/…), relayed by server.js. The API itself
+// sends no CORS headers, so a direct browser call to input.riseup.co.il dies in
+// preflight — the relay is what makes this work from a page at all.
 function ymNow(){ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); }
 
 function mapApiTransactions(list){
@@ -323,190 +403,274 @@ function mapApiTransactions(list){
     // transactionDate is UTC midnight — slice the string instead of parsing, so a
     // negative local offset can't shift the purchase back a day.
     const iso=String(t.transactionDate||'').slice(0,10);
-    // day-of-month only when the purchase falls in the current calendar month;
-    // 0 for anything carried into this cashflow month from an earlier date, so it
-    // counts toward the month but never toward "today".
+    // day-of-month only when the purchase falls in the current calendar month; 0 for
+    // anything carried into this cashflow month from earlier, so it counts toward the
+    // month but never toward "today".
     const d = iso.slice(0,7)===ym ? parseInt(iso.slice(8,10),10) : 0;
     out.push({name:t.businessName||'', amt, d});
   }
   return out;
 }
 
-function syncConfigured(){ return !!apiCfg.token || !!apiCfg.base; }
-
-function setSyncStatus(msg,isErr){
-  const el=document.getElementById('syncStatus');
-  el.classList.toggle('err',!!isErr);
-  if(msg){ el.innerHTML=msg; return; }
-  if(!syncConfigured()){ el.textContent='לא מחובר ל-RiseUp'; return; }
-  if(!lastSync){ el.textContent='מחובר · עוד לא סונכרן'; return; }
-  const d=new Date(lastSync);
-  const t=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
-  const sameDay=d.toDateString()===new Date().toDateString();
-  el.innerHTML='סונכרן <b>'+(sameDay?t:d.getDate()+'/'+(d.getMonth()+1)+' '+t)+'</b> · '+fileData.length+' חיובי אשראי';
+function endpoint(){
+  const base=(apiCfg.base||'').replace(/\/+$/,'');
+  if(!base) return '/api/riseup/transactions';                  // same origin, via server.js
+  if(/riseup\.co\.il$/i.test(new URL(base).hostname))            // pointed straight at RiseUp
+    return base+'/api/external/transactions';
+  return base+'/api/riseup/transactions';                        // some other relay
 }
 
 async function syncFromApi(silent){
-  const base=(apiCfg.base||API_BASE_DEFAULT).replace(/\/+$/,'');
-  if(!apiCfg.token && base===API_BASE_DEFAULT){
-    setSyncStatus('צריך טוקן — פתח הגדרות',true);
-    if(!silent) document.getElementById('syncSettings').classList.remove('hidden');
-    return;
-  }
-  setSyncStatus('מסנכרן…');
+  setStatus('busy','מסנכרן…');
   try{
     const headers={Accept:'application/json'};
     if(apiCfg.token) headers.Authorization='Bearer '+apiCfg.token;
-    const res=await fetch(base+'/api/external/transactions?cashflowMonth='+ymNow(),{headers});
-    if(res.status===401) throw new Error('הטוקן נדחה (401) — כנראה פג תוקף. צור חדש');
-    if(res.status===403) throw new Error('לטוקן חסרה הרשאת budget:read (403)');
-    if(res.status===429) throw new Error('יותר מדי בקשות (429) — נסה שוב בעוד דקה');
+    const res=await fetch(endpoint()+'?cashflowMonth='+ymNow(),{headers});
+
+    if(res.status===401){
+      const b=await res.json().catch(()=>({}));
+      const e=new Error(b.error==='missing_token' ? 'צריך להדביק טוקן בהגדרות' : 'הטוקן פג או בוטל — צור חדש');
+      e.noToken = b.error==='missing_token';
+      throw e;
+    }
+    if(res.status===403) throw new Error('לטוקן חסרה ההרשאה budget:read');
+    if(res.status===429) throw new Error('יותר מדי בקשות — נסה שוב בעוד דקה');
+    if(res.status===502) throw new Error('RiseUp לא זמין כרגע');
     if(!res.ok) throw new Error('שגיאת שרת '+res.status);
+
     const data=await res.json();
     fileData=mapApiTransactions(data && data.transactions);
     lastSync=Date.now();
-    save(); render(); updateInvestigateVisibility();
-    if(!document.getElementById('investigatePanel').classList.contains('hidden')) renderInvestigation();
-    setSyncStatus();
+    save(); render(true);
     if(!silent) toast('סונכרן ✓');
   }catch(err){
-    // fetch() rejects with TypeError on both CORS blocks and offline — the browser
-    // deliberately hides which, so the message has to cover both.
-    const msg = (err instanceof TypeError)
-      ? 'הקריאה נחסמה (CORS או אין רשת) — ראה proxy/README.md'
-      : err.message;
-    setSyncStatus('סנכרון נכשל: '+msg,true);
-    if(!silent) toast('סנכרון נכשל');
+    // fetch() rejects with TypeError for both a CORS block and being offline —
+    // the browser deliberately hides which, so the wording has to cover both.
+    const msg = (err instanceof TypeError) ? 'אין חיבור לשרת' : err.message;
+    // On a first visit the boot sync fires before any token exists. That's the
+    // expected state, not a failure — the onboarding card already says what to do.
+    if(err.noToken && !configured() && !lastSync){ setStatus('','לא מחובר'); return; }
+    setStatus('err',msg);
+    $('sheetStatus').textContent = msg + '. ' + (msg.includes('טוקן') ? 'צור טוקן חדש והדבק אותו למטה.' : 'נסה שוב בעוד רגע.');
+    if(!silent) toast('הסנכרון נכשל');
   }
 }
 
-document.getElementById('fileInput').addEventListener('change',(e)=>{
-  const file=e.target.files[0]; if(!file) return;
-  const r=new FileReader(); r.onload=ev=>{
-    try{
-      ingestCSV(parseCSV(ev.target.result));
-      save();
-      document.getElementById('uploadZone').classList.add('loaded');
-      document.getElementById('uploadBig').textContent='✓ '+file.name;
-      document.getElementById('uploadSmall').textContent='הקש לטעון מחדש';
-      render(); updateInvestigateVisibility();
-      if(!document.getElementById('investigatePanel').classList.contains('hidden')) renderInvestigation();
-      toast('עודכן ✓');
-    }catch(err){ toast('שגיאה בקובץ'); }
-  }; r.readAsText(file,'UTF-8');
-});
+/* ---------------- status ---------------- */
+function configured(){ return !!apiCfg.token || !!apiCfg.base; }
 
-document.getElementById('addBtn').addEventListener('click',()=>{
-  const ai=document.getElementById('amountInput'), di=document.getElementById('descInput');
-  const v=parseFloat(ai.value);
-  if(!v||v<=0){ ai.focus(); return; }
-  manualData.push({id:Date.now(),amt:v,desc:di.value.trim()});
-  ai.value=''; di.value='';
-  save(); render(); updateInvestigateVisibility();
-  if(!document.getElementById('investigatePanel').classList.contains('hidden')) renderInvestigation();
-  toast('נוסף ✓');
-});
+function setStatus(state,text){
+  const chip=$('statusChip');
+  chip.className='chip'+(state?' '+state:'');
+  $('statusText').textContent=text;
+}
+function refreshStatus(){
+  if(!configured() && !lastSync) return setStatus('','לא מחובר');
+  if(!lastSync) return setStatus('','מחובר · טרם סונכרן');
+  const d=new Date(lastSync), now=new Date();
+  const hhmm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  const sameDay=d.toDateString()===now.toDateString();
+  setStatus('ok', sameDay ? 'עודכן '+hhmm : 'עודכן '+d.getDate()+'/'+(d.getMonth()+1));
+}
 
-document.getElementById('clearBtn').addEventListener('click',()=>{
-  if(confirm('למחוק את כל הנתונים? זה לא יהיה אפשר לשחזר.')){
-    manualData=[]; fileData=[]; lastSync=null; save(); render(); updateInvestigateVisibility(); setSyncStatus();
-    document.getElementById('investigatePanel').classList.add('hidden');
-    toast('אופס למדי');
+/* ---------------- calc ---------------- */
+function calc(){
+  const now=new Date(), y=now.getFullYear(), m=now.getMonth(), dom=now.getDate();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+
+  const allToday=fileData.filter(x=>x.d===dom).map(x=>({name:x.name,amt:x.amt}));
+  for(const e of manualData) allToday.push({name:e.desc||'הוצאה',amt:e.amt,manual:true,id:e.id});
+
+  const spentToday=allToday.reduce((s,x)=>s+x.amt,0);
+  const spentMonth=fileData.reduce((s,x)=>s+x.amt,0)+manualData.reduce((s,x)=>s+x.amt,0);
+  const daysLeft=daysInMonth-dom;
+
+  const totalBudget=DAILY*daysInMonth;
+  const dynamicCeiling=Math.min(DAILY, daysLeft>0?(totalBudget-spentMonth)/daysLeft:0);
+  const remaining=dynamicCeiling-spentToday;
+  const avg=dom>0?spentMonth/dom:0;
+  const delta=DAILY*dom-spentMonth;
+
+  // Ceiling decline is measured from the first day that actually has data, not from
+  // the 1st — otherwise tracking that started mid-month reads as a gentler slope.
+  const days=fileData.map(x=>x.d).filter(d=>d>0);
+  const firstDay=days.length?Math.min(...days):dom;
+  const elapsed=Math.max(1,dom-firstDay+1);
+  const declinePerDay=(DAILY-dynamicCeiling)/elapsed;
+  const daysUntilZero=declinePerDay>0?Math.floor(dynamicCeiling/declinePerDay):null;
+
+  return {now,m,dom,daysInMonth,remaining,spentToday,spentMonth,allToday,avg,delta,daysLeft,
+          dynamicCeiling,declinePerDay,daysUntilZero};
+}
+
+/* ---------------- render ---------------- */
+let lastShown=null;
+function animateTo(el,to){
+  const from = lastShown===null ? to : lastShown;
+  lastShown=to;
+  if(from===to){ el.textContent=fmt(to); return; }
+  const t0=performance.now(), dur=600;
+  (function step(t){
+    const p=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-p,3);
+    el.textContent=fmt(from+(to-from)*e);
+    if(p<1) requestAnimationFrame(step);
+  })(t0);
+}
+
+function render(animate){
+  const c=calc();
+
+  $('dateLabel').textContent=`יום ${DAYS[c.now.getDay()]} · ${c.dom} ב${MONTHS[c.m]}`;
+
+  const amtEl=$('remainingToday');
+  const shown=Math.max(0,Math.round(c.remaining));
+  amtEl.className='r-amount'+(c.remaining<0?' neg':'');
+  if(animate) animateTo(amtEl,shown); else { amtEl.textContent=fmt(shown); lastShown=shown; }
+
+  $('ceilingLine').textContent='מתוך '+fmt(c.dynamicCeiling)+(c.dynamicCeiling<DAILY-1?' · תקרה מותאמת':'');
+
+  const meter=$('meter'), pct=c.dynamicCeiling>0?Math.min(100,(c.spentToday/c.dynamicCeiling)*100):100;
+  meter.classList.toggle('over',c.remaining<0);
+  meter.firstElementChild.style.width=pct+'%';
+
+  $('spentToday').textContent=fmt(c.spentToday);
+  $('monthSpent').textContent=fmt(c.spentMonth);
+  $('daysLeft').textContent=c.daysLeft;
+
+  const list=$('todayList');
+  list.innerHTML = c.allToday.length===0
+    ? '<div class="empty">עוד לא יצא כסף היום</div>'
+    : c.allToday.map(x=>`<div class="entry">${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחק">✕</button>`:'<span style="width:14px"></span>'}<span class="amt">-${fmt(x.amt).slice(1)}</span><span class="desc">${esc(x.name)}</span></div>`).join('');
+
+  const avgEl=$('avgDaily');
+  avgEl.textContent=fmt(c.avg);
+  avgEl.className='v'+(c.avg>DAILY?' over':' under');
+  $('avgNote').textContent=c.avg>DAILY?'מעל ₪300 ליום':'מתחת ל-₪300 ליום';
+
+  const dEl=$('monthDelta');
+  dEl.textContent=(c.delta>=0?'+':'−')+fmt(c.delta).slice(1);
+  dEl.className='v'+(c.delta<0?' over':' under');
+  $('deltaNote').textContent=c.delta>=0?'חסכת מהקצב':'מעל הקצב';
+
+  const warn=$('rateWarning');
+  if(c.dynamicCeiling>=DAILY || c.daysUntilZero===null){ warn.classList.add('hidden'); }
+  else{
+    const urgent=c.daysUntilZero<=c.daysLeft;
+    warn.className='note'+(urgent?' hot':'');
+    warn.innerHTML='<span class="ic">'+(urgent?'⚠':'◔')+'</span><span>התקרה יורדת בכ-'+fmt(c.declinePerDay)+
+      ' ליום. '+(urgent?'בקצב הזה היא מתאפסת בעוד כ-'+c.daysUntilZero+' ימים — לפני סוף החודש.'
+                     :'החודש ייגמר לפני שהיא מתאפסת.')+'</span>';
   }
-});
 
-[document.getElementById('amountInput'),document.getElementById('descInput')].forEach(el=>{
-  el.addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('addBtn').click(); });
-});
+  $('investigateBtn').classList.toggle('hidden',fileData.length===0&&manualData.length===0);
+  if(!$('investigatePanel').classList.contains('hidden')) renderInvestigation();
+  $('onboard').classList.toggle('hidden',configured()||fileData.length>0);
+  refreshStatus();
+}
 
-document.getElementById('todayList').addEventListener('click',e=>{
-  const btn=e.target.closest('.del');
-  if(!btn) return;
-  const id=parseInt(btn.dataset.id);
-  manualData=manualData.filter(x=>x.id!==id);
-  save(); render();
-  if(!document.getElementById('investigatePanel').classList.contains('hidden')) renderInvestigation();
-  toast('נמחק');
-});
+function esc(s){ return String(s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
 
 function renderInvestigation(){
-  const panel = document.getElementById('investigatePanel');
-
-  // top single expenses (file + manual) this month
-  const all = [
-    ...fileData.map(x=>({name:x.name||'ללא שם', amt:x.amt, day:x.d})),
-    ...manualData.map(x=>({name:x.desc||'הוצאה ידנית', amt:x.amt, day:null}))
+  const panel=$('investigatePanel');
+  const all=[
+    ...fileData.map(x=>({name:x.name||'ללא שם',amt:x.amt,day:x.d})),
+    ...manualData.map(x=>({name:x.desc||'הוצאה ידנית',amt:x.amt,day:null}))
   ];
+  if(all.length===0){ panel.innerHTML='<div class="empty">אין עדיין נתונים לחודש הזה</div>'; panel.classList.remove('hidden'); return; }
 
-  if(all.length===0){
-    panel.innerHTML = '<div class="inv-empty">אין עדיין נתונים לחודש הזה</div>';
-    panel.classList.remove('hidden');
-    return;
+  const top=[...all].sort((a,b)=>b.amt-a.amt).slice(0,6);
+  const groups={};
+  for(const it of all){
+    const k=(it.name||'ללא שם').trim();
+    (groups[k] ||= {name:k,total:0,count:0});
+    groups[k].total+=it.amt; groups[k].count++;
   }
+  const grouped=Object.values(groups).filter(g=>g.count>=2).sort((a,b)=>b.total-a.total).slice(0,6);
 
-  const top = [...all].sort((a,b)=>b.amt-a.amt).slice(0,6);
-
-  // group by normalized name for recurring/accumulating expenses
-  const groups = {};
-  for(const item of all){
-    const key = (item.name||'ללא שם').trim();
-    if(!groups[key]) groups[key] = {name:key, total:0, count:0};
-    groups[key].total += item.amt;
-    groups[key].count += 1;
-  }
-  const grouped = Object.values(groups)
-    .filter(g=>g.count>=2)
-    .sort((a,b)=>b.total-a.total)
-    .slice(0,6);
-
-  let html = '<div class="inv-section"><div class="inv-title">ההוצאות הבודדות הגדולות ביותר</div>';
-  html += top.map(x=>`<div class="inv-row"><span class="val">-${fmt(x.amt).slice(1)}</span><span class="name">${x.name}${x.day?` <span class="count">יום ${x.day}</span>`:''}</span></div>`).join('');
-  html += '</div>';
-
-  html += '<div class="inv-section"><div class="inv-title">הכי מצטבר (חוזר כמה פעמים)</div>';
-  if(grouped.length===0){
-    html += '<div class="inv-empty">אין עדיין הוצאות שחוזרות פעמיים או יותר</div>';
-  } else {
-    html += grouped.map(g=>`<div class="inv-row"><span class="val">-${fmt(g.total).slice(1)}</span><span class="name">${g.name}<span class="count">× ${g.count}</span></span></div>`).join('');
-  }
-  html += '</div>';
-
-  panel.innerHTML = html;
+  let html='<div style="padding:12px 15px 4px"><div class="sec" style="margin:0 0 6px">הגדולות ביותר</div></div>';
+  html+=top.map(x=>`<div class="entry"><span class="amt">-${fmt(x.amt).slice(1)}</span><span class="desc">${esc(x.name)}${x.day?` <span style="color:var(--dim-2);font-size:11.5px">יום ${x.day}</span>`:''}</span></div>`).join('');
+  html+='<div style="padding:14px 15px 4px"><div class="sec" style="margin:0 0 6px">חוזר על עצמו</div></div>';
+  html+= grouped.length===0
+    ? '<div class="empty">אין הוצאה שחוזרת פעמיים או יותר</div>'
+    : grouped.map(g=>`<div class="entry"><span class="amt">-${fmt(g.total).slice(1)}</span><span class="desc">${esc(g.name)} <span style="color:var(--dim-2);font-size:11.5px">× ${g.count}</span></span></div>`).join('');
+  panel.innerHTML=html;
   panel.classList.remove('hidden');
 }
 
-document.getElementById('investigateBtn').addEventListener('click', ()=>{
-  const panel = document.getElementById('investigatePanel');
-  if(panel.classList.contains('hidden')) renderInvestigation();
-  else panel.classList.add('hidden');
-});
-
-function updateInvestigateVisibility(){
-  const btn = document.getElementById('investigateBtn');
-  if(fileData.length>0 || manualData.length>0) btn.classList.remove('hidden');
-  else btn.classList.add('hidden');
+/* ---------------- sheet ---------------- */
+function openSheet(){
+  $('tokenInput').value=apiCfg.token||'';
+  $('baseInput').value=apiCfg.base||'';
+  $('scrim').classList.add('open'); $('sheet').classList.add('open');
 }
+function closeSheet(){ $('scrim').classList.remove('open'); $('sheet').classList.remove('open'); }
 
-document.getElementById('syncSettingsBtn').addEventListener('click',()=>{
-  document.getElementById('syncSettings').classList.toggle('hidden');
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),1600); }
+
+/* ---------------- events ---------------- */
+$('openSettings').addEventListener('click',openSheet);
+$('statusChip').addEventListener('click',openSheet);
+$('onboardBtn').addEventListener('click',openSheet);
+$('scrim').addEventListener('click',closeSheet);
+
+$('saveCfgBtn').addEventListener('click',()=>{
+  apiCfg.token=$('tokenInput').value.trim();
+  apiCfg.base=$('baseInput').value.trim();
+  save(); closeSheet(); render();
+  syncFromApi(false);
+});
+$('syncBtn').addEventListener('click',()=>{ closeSheet(); syncFromApi(false); });
+
+$('addBtn').addEventListener('click',()=>{
+  const ai=$('amountInput'), di=$('descInput');
+  const v=parseFloat(ai.value);
+  if(!v||v<=0){ ai.focus(); return; }
+  manualData.push({id:Date.now(),amt:v,desc:di.value.trim()});
+  ai.value=''; di.value=''; ai.blur(); di.blur();
+  save(); render(true); toast('נוסף ✓');
 });
 
-document.getElementById('saveCfgBtn').addEventListener('click',()=>{
-  apiCfg.token=document.getElementById('tokenInput').value.trim();
-  apiCfg.base=document.getElementById('baseInput').value.trim();
-  save(); setSyncStatus();
-  document.getElementById('syncSettings').classList.add('hidden');
-  toast('נשמר ✓');
-  if(syncConfigured()) syncFromApi();
+[$('amountInput'),$('descInput')].forEach(el=>{
+  el.addEventListener('keydown',e=>{ if(e.key==='Enter') $('addBtn').click(); });
 });
 
-document.getElementById('syncBtn').addEventListener('click',()=>syncFromApi(false));
+$('todayList').addEventListener('click',e=>{
+  const btn=e.target.closest('.del'); if(!btn) return;
+  const id=parseInt(btn.dataset.id,10);
+  manualData=manualData.filter(x=>x.id!==id);
+  save(); render(true); toast('נמחק');
+});
 
+$('investigateBtn').addEventListener('click',()=>{
+  const p=$('investigatePanel');
+  if(p.classList.contains('hidden')) renderInvestigation(); else p.classList.add('hidden');
+});
+
+$('clearBtn').addEventListener('click',()=>{
+  if(!confirm('למחוק את כל הנתונים? אי אפשר לשחזר.')) return;
+  manualData=[]; fileData=[]; lastSync=null; save();
+  $('investigatePanel').classList.add('hidden');
+  closeSheet(); render(); toast('הכל אופס');
+});
+
+$('fileInput').addEventListener('change',e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      ingestCSV(parseCSV(ev.target.result));
+      save(); closeSheet(); render(true); toast('הקובץ נטען ✓');
+    }catch(err){ toast('לא הצלחתי לקרוא את הקובץ'); }
+  };
+  r.readAsText(file,'UTF-8');
+});
+
+/* ---------------- boot ---------------- */
 load();
-document.getElementById('tokenInput').value=apiCfg.token||'';
-document.getElementById('baseInput').value=apiCfg.base||'';
-render(); updateInvestigateVisibility(); setSyncStatus();
-if(syncConfigured()) syncFromApi(true);
+render();
+// Same-origin relay may hold the token server-side, so try a sync even with no
+// token pasted here — a 401 comes back with a clear reason either way.
+if(configured() || !apiCfg.base) syncFromApi(true);
 </script>
 </body>
 </html>

@@ -1,0 +1,87 @@
+/**
+ * Static host + RiseUp API relay.
+ *
+ * The browser can't call https://input.riseup.co.il directly — that API is built
+ * for server-side use and doesn't send CORS headers, so the request dies in
+ * preflight. Relaying it through the same origin that serves the page sidesteps
+ * CORS entirely: to the browser it's just a same-origin request.
+ *
+ *   GET /api/riseup/transactions?cashflowMonth=YYYY-MM
+ *     -> GET https://input.riseup.co.il/api/external/transactions?...
+ *
+ * The token comes from the RISEUP_PAT env var when set (preferred — it never
+ * touches the browser), otherwise from the Authorization header the app sends.
+ */
+
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const PORT = process.env.PORT || 3000;
+const UPSTREAM = (process.env.RISEUP_API_BASE || 'https://input.riseup.co.il').replace(/\/+$/, '');
+const ENV_PAT = process.env.RISEUP_PAT || '';
+
+// Allowlist, not a pass-through: the token must only ever reach these read endpoints.
+const RELAY_ROUTES = new Set(['transactions', 'budget']);
+
+const STATIC = {
+  '/': ['index.html', 'text/html; charset=utf-8'],
+  '/index.html': ['index.html', 'text/html; charset=utf-8'],
+  '/manifest.json': ['manifest.json', 'application/manifest+json; charset=utf-8'],
+};
+
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://localhost');
+
+  if (url.pathname.startsWith('/api/riseup/')) return relay(req, res, url);
+
+  const entry = STATIC[url.pathname];
+  if (!entry || req.method !== 'GET') return send(res, 404, 'text/plain; charset=utf-8', 'Not found');
+
+  fs.readFile(path.join(__dirname, entry[0]), (err, body) => {
+    if (err) return send(res, 404, 'text/plain; charset=utf-8', 'Not found');
+    send(res, 200, entry[1], body, { 'Cache-Control': 'no-cache' });
+  });
+});
+
+async function relay(req, res, url) {
+  if (req.method !== 'GET') return json(res, 405, { error: 'method_not_allowed' });
+
+  const route = url.pathname.slice('/api/riseup/'.length);
+  if (!RELAY_ROUTES.has(route)) return json(res, 404, { error: 'unknown_route' });
+
+  const token = ENV_PAT || (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) {
+    return json(res, 401, {
+      error: 'missing_token',
+      message: 'No RiseUp token. Paste one in the app settings, or set RISEUP_PAT on the server.',
+    });
+  }
+
+  let upstream;
+  try {
+    upstream = await fetch(`${UPSTREAM}/api/external/${route}${url.search}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    });
+  } catch (e) {
+    // Never echo the error verbatim — a failed request can carry the URL and headers.
+    console.error('relay: upstream fetch failed:', e.cause?.code || e.message);
+    return json(res, 502, { error: 'upstream_unreachable', message: 'Could not reach RiseUp.' });
+  }
+
+  const body = await upstream.text();
+  send(res, upstream.status, 'application/json; charset=utf-8', body);
+}
+
+function send(res, status, type, body, extra) {
+  res.writeHead(status, { 'Content-Type': type, ...(extra || {}) });
+  res.end(body);
+}
+
+function json(res, status, body) {
+  send(res, status, 'application/json; charset=utf-8', JSON.stringify(body));
+}
+
+server.listen(PORT, () => {
+  console.log(`resipt listening on :${PORT} (upstream ${UPSTREAM}, token from ${ENV_PAT ? 'RISEUP_PAT' : 'client'})`);
+});
