@@ -278,7 +278,7 @@
 <div class="scrim" id="padScrim"></div>
 <div class="sheet pad" id="padSheet" role="dialog" aria-label="הוספת הוצאה">
   <div class="grab"></div>
-  <div class="pad-title">כמה שילמת במזומן?</div>
+  <div class="pad-title">כמה הוצאת עכשיו?</div>
   <div class="wheel">
     <div class="wheel-band" id="wheelBand"></div>
     <div class="wheel-scroll" id="wheelScroll">
@@ -357,10 +357,11 @@ function save(){ try{
 }catch(e){} }
 function load(){ try{
   const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m);
-  // Entries used to carry no date and were all counted as "today", forever. Stamp
-  // the old ones with today so they keep behaving as they did until they age out.
+  // Entries are a running tally for one day only — RiseUp delivers the real charge
+  // within a day, so anything not typed today is dropped rather than double-counted.
+  // Undated entries predate the stamping and are by definition old.
   const n=new Date(), ym=ymNow();
-  manualData=manualData.map(e=>e.ym?e:Object.assign({ym,d:n.getDate()},e));
+  manualData=manualData.filter(e=>e.ym===ym && e.d===n.getDate());
   const f=localStorage.getItem('fileData'); if(f) fileData=JSON.parse(f);
   const c=localStorage.getItem('apiCfg'); if(c) apiCfg=Object.assign({token:'',base:''},JSON.parse(c));
   const s=localStorage.getItem('lastSync'); if(s) lastSync=parseInt(s,10)||null;
@@ -480,16 +481,19 @@ function calc(){
   const now=new Date(), y=now.getFullYear(), m=now.getMonth(), dom=now.getDate();
   const daysInMonth=new Date(y,m+1,0).getDate();
 
-  // Manual entries are stamped with the day they were typed, so an entry from an
-  // earlier day counts toward the month without inflating today.
+  // Manual entries are a same-day estimate of charges RiseUp hasn't delivered yet, so
+  // they move today's number and nothing else. Everything monthly — the total, the
+  // average, the pace and the ceiling those feed — stays sourced from RiseUp alone.
+  // Counting them in spentMonth too would dock today twice: once as spending, and
+  // again through the ceiling recomputed over the remaining days.
   const ym=ymNow();
-  const manualMonth=manualData.filter(e=>e.ym===ym);
+  const manualToday=manualData.filter(e=>e.ym===ym && e.d===dom);
 
   const allToday=fileData.filter(x=>x.d===dom).map(x=>({name:x.name,amt:x.amt}));
-  for(const e of manualMonth) if(e.d===dom) allToday.push({name:e.desc||'הוצאה',amt:e.amt,manual:true,id:e.id});
+  for(const e of manualToday) allToday.push({name:e.desc||'הוצאה',amt:e.amt,manual:true,id:e.id});
 
   const spentToday=allToday.reduce((s,x)=>s+x.amt,0);
-  const spentMonth=fileData.reduce((s,x)=>s+x.amt,0)+manualMonth.reduce((s,x)=>s+x.amt,0);
+  const spentMonth=fileData.reduce((s,x)=>s+x.amt,0);
   const daysLeft=daysInMonth-dom;
 
   const totalBudget=DAILY*daysInMonth;
@@ -541,7 +545,7 @@ function render(animate){
 
   const list=$('todayList');
   list.innerHTML = c.allToday.length>0
-    ? c.allToday.map(x=>`<div class="row">${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${x.manual?'<span class="sub">מזומן</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('')
+    ? c.allToday.map(x=>`<div class="row">${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${x.manual?'<span class="sub">רישום זמני</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('')
     : '<div class="blank"><div class="t">עוד לא נרשמה הוצאה היום</div></div>';
 
   $('monthSpent').textContent=fmt(c.spentMonth);
@@ -568,7 +572,7 @@ function render(animate){
       ' ימים, לפני סוף החודש. התקרה יורדת בכ-'+fmt(c.declinePerDay)+' בכל יום.</span>';
   }
 
-  $('investigateBtn').classList.toggle('hidden',fileData.length===0&&manualData.length===0);
+  $('investigateBtn').classList.toggle('hidden',fileData.length===0);
   if(!$('investigatePanel').classList.contains('hidden')) renderInvestigation();
   $('onboard').classList.toggle('hidden',configured()||fileData.length>0);
   refreshStatus();
@@ -576,10 +580,7 @@ function render(animate){
 
 function renderInvestigation(){
   const panel=$('investigatePanel');
-  const all=[
-    ...fileData.map(x=>({name:x.name||'ללא שם',amt:x.amt,day:x.d})),
-    ...manualData.map(x=>({name:x.desc||'מזומן',amt:x.amt,day:null}))
-  ];
+  const all=fileData.map(x=>({name:x.name||'ללא שם',amt:x.amt,day:x.d}));
   if(all.length===0){ panel.innerHTML=''; panel.classList.add('hidden'); return; }
 
   const top=[...all].sort((a,b)=>b.amt-a.amt).slice(0,6);
@@ -592,9 +593,9 @@ function renderInvestigation(){
   const grouped=Object.values(groups).filter(g=>g.count>=2).sort((a,b)=>b.total-a.total).slice(0,6);
 
   let html='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">ההוצאות הגדולות</div></div>';
-  // day: a number for a purchase made this month, 0 for one carried into this
-  // cashflow month from earlier, null for a cash entry typed in by hand.
-  const when = d => d===null ? 'מזומן' : d>0 ? d+' ב'+MONTHS[new Date().getMonth()] : 'חיוב מקנייה קודמת';
+  // day: the day of the purchase, or 0 for a charge carried into this cashflow month
+  // from an earlier purchase.
+  const when = d => d>0 ? d+' ב'+MONTHS[new Date().getMonth()] : 'חיוב מקנייה קודמת';
   html+=top.map(x=>`<div class="row"><span class="lbl"><b>${esc(x.name)}</b><span class="sub">${when(x.day)}</span></span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
   if(grouped.length){
     html+='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">חוזר על עצמו</div></div>';
@@ -746,6 +747,7 @@ $('fileInput').addEventListener('change',e=>{
 
 /* ---------------- boot ---------------- */
 load();
+save();   // persist the prune of yesterday's entries, don't wait for the next write
 buildWheel();
 render();
 // The same-origin relay may hold the token server-side, so try a sync even with no
