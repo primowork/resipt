@@ -109,8 +109,33 @@
   .banner{ display:flex; gap:11px; align-items:flex-start; border-radius:16px; padding:15px 16px;
     font-size:15px; line-height:1.6; margin-bottom:12px; }
   .banner.warn{ background:var(--orange-soft); color:#A8431B; }
+  .banner.good{ background:var(--green-soft); color:#1F6E48; }
+  .banner.good .ic{ background:var(--green); }
+  .banner b{ font-weight:700; }
   .banner .ic{ flex:none; width:22px; height:22px; border-radius:50%; background:var(--orange);
     color:#fff; font-size:15px; font-weight:700; line-height:22px; text-align:center; }
+
+  /* ---------- 7-day chart ---------- */
+  /* The bar track is a fixed height shared by every column and by the goal line, so a
+     tall bar can't be squashed by flex and the line can't drift off the same scale. */
+  .chart{ --track:112px; --lbl:15px; --gap:6px;
+    position:relative; display:flex; justify-content:space-between; gap:6px; margin-top:14px; }
+  .chart .goal{ position:absolute; left:0; right:0; border-top:1.5px dashed #D5D8E0;
+    pointer-events:none; z-index:1; }
+  .chart .goal span{ position:absolute; inset-inline-end:0; top:-9px; background:var(--card);
+    padding-inline:4px; font-size:11px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
+  .col{ flex:1; display:flex; flex-direction:column; align-items:center; gap:var(--gap); min-width:0; }
+  .col .v{ height:var(--lbl); flex:none; font-size:11px; color:var(--ink-3);
+    font-variant-numeric:tabular-nums; line-height:var(--lbl); }
+  .col .track{ position:relative; width:100%; height:var(--track); flex:none; }
+  .col .b{ position:absolute; bottom:0; left:0; right:0; margin-inline:auto; max-width:34px;
+    border-radius:6px 6px 3px 3px; background:var(--yellow); z-index:2;
+    transition:height .5s cubic-bezier(.2,.7,.3,1); }
+  .col .b.zero{ background:#E6E8EF; }
+  .col.over .b{ background:var(--orange); }
+  .col.over .v{ color:var(--orange); font-weight:600; }
+  .col .d{ height:var(--lbl); flex:none; font-size:12px; color:var(--ink-3); line-height:var(--lbl); }
+  .col.today .d{ color:var(--blue); font-weight:700; }
 
   .linkbtn{ background:none; border:none; color:var(--blue); font-size:15px; font-weight:600;
     padding:14px 0 0; width:100%; text-align:center; }
@@ -248,11 +273,17 @@
     </div>
   </div>
 
-  <div class="banner hidden" id="rateWarning"></div>
-
   <div class="card">
     <div class="head-line"><div class="card-t">ההוצאות של היום</div></div>
     <div id="todayList"></div>
+  </div>
+
+  <div class="card hidden" id="weekCard">
+    <div class="head-line" style="margin-bottom:4px">
+      <div class="card-t">7 הימים האחרונים</div>
+    </div>
+    <p class="card-s" style="font-size:13.5px">לפי מה שנקלט ברייזאפ</p>
+    <div class="chart" id="chart"></div>
   </div>
 
   <div class="card">
@@ -262,8 +293,8 @@
     </div>
     <div class="row"><span class="lbl">יצא בכרטיסי אשראי</span><span class="val num" id="monthSpent">₪0</span></div>
     <div class="row"><span class="lbl">ממוצע ליום<span class="sub" id="avgNote">היעד הוא ₪300</span></span><span class="val num" id="avgDaily">₪0</span></div>
-    <div class="row"><span class="lbl">מול הקצב<span class="sub" id="deltaNote">מתחילת החודש</span></span><span class="val num" id="monthDelta">—</span></div>
     <div class="row"><span class="lbl">ימים שנותרו בחודש</span><span class="val num" id="daysLeft">—</span></div>
+    <div class="banner hidden" id="forecast" style="margin:16px 0 0"></div>
     <div id="investigatePanel" class="hidden"></div>
   </div>
 
@@ -338,6 +369,9 @@
 const DAILY = 300;
 const MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+// First letters of the day names collide — four of seven are "ש" — so the chart uses
+// the conventional א-ש lettering instead.
+const DAY_LETTERS = ["א","ב","ג","ד","ה","ו","ש"];
 
 let fileData = [];
 let manualData = [];
@@ -500,18 +534,14 @@ function calc(){
   const dynamicCeiling=Math.min(DAILY, daysLeft>0?(totalBudget-spentMonth)/daysLeft:0);
   const remaining=dynamicCeiling-spentToday;
   const avg=dom>0?spentMonth/dom:0;
-  const delta=DAILY*dom-spentMonth;
 
-  // Ceiling decline is measured from the first day that actually has data, not from
-  // the 1st — otherwise tracking that started mid-month reads as a gentler slope.
-  const days=fileData.map(x=>x.d).filter(d=>d>0);
-  const firstDay=days.length?Math.min(...days):dom;
-  const elapsed=Math.max(1,dom-firstDay+1);
-  const declinePerDay=(DAILY-dynamicCeiling)/elapsed;
-  const daysUntilZero=declinePerDay>0?Math.floor(dynamicCeiling/declinePerDay):null;
+  // Carry on at today's average and this is where the month lands. Negative = over
+  // budget by that much; positive = money still in hand on the last day.
+  const projected=avg*daysInMonth;
+  const projectedDiff=totalBudget-projected;
 
-  return {now,m,dom,daysInMonth,remaining,spentToday,spentMonth,allToday,avg,delta,daysLeft,
-          dynamicCeiling,declinePerDay,daysUntilZero};
+  return {now,m,dom,daysInMonth,remaining,spentToday,spentMonth,allToday,avg,daysLeft,
+          dynamicCeiling,projected,projectedDiff};
 }
 
 /* ---------------- render ---------------- */
@@ -555,27 +585,63 @@ function render(animate){
   avgEl.className='val num '+(c.avg>DAILY?'neg':'pos');
   $('avgNote').textContent=c.avg>DAILY?'מעל היעד של ₪300':'מתחת ליעד של ₪300';
 
-  const dEl=$('monthDelta');
-  dEl.textContent=(c.delta>=0?'+':'-')+fmt(c.delta);
-  dEl.className='val num '+(c.delta<0?'neg':'pos');
-  $('deltaNote').textContent=c.delta>=0?'חסכת עד עכשיו':'מעל הקצב עד עכשיו';
-
   $('daysLeft').textContent=c.daysLeft;
 
-  // Only worth interrupting for when the ceiling actually runs out before the month
-  // does. "It declines, but you'll be fine" is noise on a screen meant to be glanced at.
-  const warn=$('rateWarning');
-  if(c.daysUntilZero===null || c.daysUntilZero>c.daysLeft){ warn.classList.add('hidden'); }
+  // The question worth answering is forward-looking: carry on at this rate and does the
+  // month end over budget or with money left? A backward "you're ₪212 off the pace"
+  // states the same data in a form nobody can act on.
+  const fc=$('forecast');
+  if(c.spentMonth<=0){ fc.classList.add('hidden'); }
   else{
-    warn.className='banner warn';
-    warn.innerHTML='<span class="ic">!</span><span>בקצב הזה התקציב היומי יתאפס בעוד כ-'+c.daysUntilZero+
-      ' ימים, לפני סוף החודש. התקרה יורדת בכ-'+fmt(c.declinePerDay)+' בכל יום.</span>';
+    const over=c.projectedDiff<0;
+    fc.className='banner '+(over?'warn':'good');
+    fc.innerHTML='<span class="ic">'+(over?'!':'✓')+'</span><span>'+(over
+      ? 'בקצב הזה תסיים את החודש <b>'+fmt(c.projectedDiff)+' מעל התקציב</b>'
+      : 'בקצב הזה יישארו לך <b>'+fmt(c.projectedDiff)+'</b> בסוף החודש')+'</span>';
   }
+
+  renderChart(c);
 
   $('investigateBtn').classList.toggle('hidden',fileData.length===0);
   if(!$('investigatePanel').classList.contains('hidden')) renderInvestigation();
   $('onboard').classList.toggle('hidden',configured()||fileData.length>0);
   refreshStatus();
+}
+
+// Spending per day for the last week. Today comes from spentToday so it includes the
+// wheel's provisional entry and matches the headline; earlier days are RiseUp only.
+function renderChart(c){
+  const card=$('weekCard');
+  if(fileData.length===0){ card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+
+  const from=Math.max(1,c.dom-6), days=[];
+  for(let d=from;d<=c.dom;d++){
+    const total = d===c.dom ? c.spentToday : fileData.filter(x=>x.d===d).reduce((s,x)=>s+x.amt,0);
+    days.push({d,total});
+  }
+
+  // Scale to the goal at minimum, so an ordinary week doesn't stretch to fill the card
+  // and every bar reads against the same ₪300 line.
+  // Scale to the goal at minimum, so an ordinary week doesn't stretch to fill the card
+  // and every bar reads against the same ₪300 line.
+  const max=Math.max(DAILY,...days.map(x=>x.total))*1.1;
+
+  // The goal line lives in the chart's frame while the bars live in the track's, so its
+  // offset is resolved here in pixels against the same track height the bars use.
+  const cs=getComputedStyle($('chart'));
+  const track=parseFloat(cs.getPropertyValue('--track'));
+  const below=parseFloat(cs.getPropertyValue('--lbl'))+parseFloat(cs.getPropertyValue('--gap'));
+
+  $('chart').innerHTML='<div class="goal" style="bottom:'+(below+DAILY/max*track)+'px"><span>'+DAILY+'</span></div>'
+    + days.map(x=>{
+        const dt=new Date(c.now.getFullYear(),c.now.getMonth(),x.d);
+        const h=x.total>0?Math.max(3,x.total/max*track):3;
+        return '<div class="col'+(x.total>DAILY?' over':'')+(x.d===c.dom?' today':'')+'">'
+          + '<span class="v">'+(x.total>0?Math.round(x.total):'')+'</span>'
+          + '<div class="track"><div class="b'+(x.total>0?'':' zero')+'" style="height:'+h+'px"></div></div>'
+          + '<span class="d">'+DAY_LETTERS[dt.getDay()]+'</span></div>';
+      }).join('');
 }
 
 function renderInvestigation(){
