@@ -596,8 +596,8 @@ function render(animate){
     const over=c.projectedDiff<0;
     fc.className='banner '+(over?'warn':'good');
     fc.innerHTML='<span class="ic">'+(over?'!':'✓')+'</span><span>'+(over
-      ? 'בקצב הזה תסיים את החודש <b>'+fmt(c.projectedDiff)+' מעל התקציב</b>'
-      : 'בקצב הזה יישארו לך <b>'+fmt(c.projectedDiff)+'</b> בסוף החודש')+'</span>';
+      ? 'אם תמשיך להוציא ככה, עד סוף החודש תוציא יותר מדי — <b>'+fmt(c.projectedDiff)+' מעל התקציב</b>'
+      : 'אם תמשיך להוציא ככה, עד סוף החודש יישאר לך חיסכון של <b>'+fmt(c.projectedDiff)+'</b>')+'</span>';
   }
 
   renderChart(c);
