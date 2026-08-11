@@ -141,14 +141,11 @@
     min-width:20px; padding-inline:6px; }
   .col{ cursor:pointer; }
 
-  .day-head{ display:flex; align-items:center; gap:10px; margin:18px 0 2px;
-    padding-top:16px; border-top:1px solid var(--line); }
-  .day-head .t{ flex:1; font-size:16px; font-weight:600; }
-  .day-head .s{ font-size:17px; font-weight:700; color:var(--orange);
-    font-variant-numeric:tabular-nums; direction:ltr; }
-  .day-head .x{ width:28px; height:28px; flex:none; border:none; border-radius:50%;
-    background:var(--bg); color:var(--ink-3); font-size:14px; line-height:1;
-    display:grid; place-items:center; }
+  .day-top{ display:flex; align-items:flex-start; gap:12px; margin-bottom:6px; }
+  .day-when{ flex:1; min-width:0; }
+  .day-when h3{ margin:0; }
+  .day-when .lead{ margin:2px 0 0; }
+  .day-sum{ font-size:26px; font-weight:700; color:var(--orange); letter-spacing:-.5px; }
 
   .linkbtn{ background:none; border:none; color:var(--blue); font-size:15px; font-weight:600;
     padding:14px 0 0; width:100%; text-align:center; }
@@ -297,7 +294,6 @@
     </div>
     <p class="card-s" style="font-size:13.5px">לפי מה שנקלט ברייזאפ</p>
     <div class="chart" id="chart"></div>
-    <div id="dayDetail" class="hidden"></div>
   </div>
 
   <div class="card">
@@ -318,6 +314,20 @@
   <div class="addbar-inner">
     <button class="addbig" id="openPad"><span class="plus">+</span><span>הוספת הוצאה</span></button>
   </div>
+</div>
+
+<div class="scrim" id="dayScrim"></div>
+<div class="sheet" id="daySheet" role="dialog" aria-label="הוצאות היום שנבחר">
+  <div class="grab"></div>
+  <div class="day-top">
+    <div class="day-when">
+      <h3 id="dayTitle"></h3>
+      <p class="lead" id="daySub">יצא באותו יום</p>
+    </div>
+    <div class="day-sum num" id="dayTotal"></div>
+  </div>
+  <div id="dayRows"></div>
+  <button class="btn btn-ghost" id="dayCloseBtn" style="margin-top:18px">סגירה</button>
 </div>
 
 <div class="scrim" id="padScrim"></div>
@@ -546,7 +556,12 @@ function calc(){
   const daysLeft=daysInMonth-dom;
 
   const totalBudget=DAILY*daysInMonth;
-  const dynamicCeiling=Math.min(DAILY, daysLeft>0?(totalBudget-spentMonth)/daysLeft:0);
+  // Today is one of the days the remaining budget has to cover. Dividing by daysLeft
+  // (which counts only the days after today) while still letting today spend the result
+  // overshoots the month by one day's worth, and on the last day it divided by zero and
+  // reported that nothing at all could be spent.
+  const daysToCover=daysLeft+1;
+  const dynamicCeiling=Math.min(DAILY,Math.max(0,(totalBudget-spentMonth)/daysToCover));
   const remaining=dynamicCeiling-spentToday;
   const avg=dom>0?spentMonth/dom:0;
 
@@ -612,6 +627,7 @@ function render(animate){
     fc.className='banner '+(over?'warn':'good');
     fc.innerHTML='<span class="ic">'+(over?'!':'✓')+'</span><span>'+(over
       ? 'אם תמשיך להוציא ככה, עד סוף החודש תוציא יותר מדי — <b>'+fmt(c.projectedDiff)+' מעל התקציב</b>'
+        + '<br><span style="opacity:.85">תישאר על <b>'+fmt(c.dynamicCeiling)+' ליום</b> ותסגור את החודש בדיוק בתקציב</span>'
       : 'אם תמשיך להוציא ככה, עד סוף החודש יישאר לך חיסכון של <b>'+fmt(c.projectedDiff)+'</b>')+'</span>';
   }
 
@@ -665,8 +681,7 @@ function renderChart(c){
 // What was actually bought on the day whose bar was tapped. Today reads from allToday
 // so it carries the wheel's provisional entry and agrees with its own bar.
 function renderDayDetail(c){
-  const box=$('dayDetail');
-  if(chartDay===null){ box.classList.add('hidden'); box.innerHTML=''; return; }
+  if(chartDay===null) return;
 
   const items = chartDay===c.dom
     ? c.allToday.map(x=>({name:x.name,amt:x.amt,manual:x.manual}))
@@ -676,15 +691,25 @@ function renderDayDetail(c){
   const total=items.reduce((s,x)=>s+x.amt,0);
   const dt=new Date(c.now.getFullYear(),c.now.getMonth(),chartDay);
 
-  box.innerHTML='<div class="day-head"><button class="x" id="dayClose" aria-label="סגירה">✕</button>'
-    + '<span class="t">יום '+DAYS[dt.getDay()]+', '+chartDay+' ב'+MONTHS[c.m]+'</span>'
-    + (total>0?'<span class="s num">-'+fmt(total)+'</span>':'')+'</div>'
-    + (items.length
-        ? items.map(x=>'<div class="row"><span class="lbl"><b>'+esc(x.name||'הוצאה')+'</b>'
-            + (x.manual?'<span class="sub">רישום זמני</span>':'')+'</span>'
-            + '<span class="val neg num">-'+fmt(x.amt)+'</span></div>').join('')
-        : '<div class="blank"><div class="t">לא יצא כסף ביום הזה</div></div>');
-  box.classList.remove('hidden');
+  $('dayTitle').textContent='יום '+DAYS[dt.getDay()]+', '+chartDay+' ב'+MONTHS[c.m];
+  $('daySub').textContent=items.length?'יצא באותו יום':'';
+  $('dayTotal').textContent=total>0?'-'+fmt(total):'';
+  $('dayRows').innerHTML = items.length
+    ? items.map(x=>'<div class="row"><span class="lbl"><b>'+esc(x.name||'הוצאה')+'</b>'
+        + (x.manual?'<span class="sub">רישום זמני</span>':'')+'</span>'
+        + '<span class="val neg num">-'+fmt(x.amt)+'</span></div>').join('')
+    : '<div class="blank"><div class="t">לא יצא כסף ביום הזה</div></div>';
+}
+
+function openDay(d){
+  chartDay=d;
+  renderChart(calc());
+  $('dayScrim').classList.add('open'); $('daySheet').classList.add('open');
+}
+function closeDay(){
+  chartDay=null;
+  $('dayScrim').classList.remove('open'); $('daySheet').classList.remove('open');
+  renderChart(calc());
 }
 
 function renderInvestigation(){
@@ -831,18 +856,14 @@ $('todayList').addEventListener('click',e=>{
   save(); render(true); toast('נמחק');
 });
 
+// Delegated: the chart is rebuilt through innerHTML on every render, so per-column
+// listeners would be discarded on the next sync.
 $('chart').addEventListener('click',e=>{
-  if(e.target.closest('#dayClose')){ chartDay=null; renderChart(calc()); return; }
   const col=e.target.closest('.col'); if(!col) return;
-  const d=parseInt(col.dataset.day,10);
-  chartDay = chartDay===d ? null : d;   // tapping the open day again closes it
-  renderChart(calc());
+  openDay(parseInt(col.dataset.day,10));
 });
-
-$('dayDetail').addEventListener('click',e=>{
-  if(!e.target.closest('#dayClose')) return;
-  chartDay=null; renderChart(calc());
-});
+$('dayScrim').addEventListener('click',closeDay);
+$('dayCloseBtn').addEventListener('click',closeDay);
 
 $('investigateBtn').addEventListener('click',()=>{
   const p=$('investigatePanel');
