@@ -172,15 +172,20 @@
   .addbar{ position:fixed; bottom:0; left:0; right:0; z-index:60;
     padding:12px 16px calc(12px + var(--safe-b));
     background:linear-gradient(to top, var(--bg) 65%, rgba(244,245,247,0)); }
-  .addbar-inner{ max-width:480px; margin:0 auto; }
-  .addbig{ display:flex; align-items:center; justify-content:center; gap:10px; width:100%;
-    border:none; border-radius:18px; background:var(--blue); color:#fff; padding:17px;
-    font-size:17px; font-weight:600; box-shadow:0 8px 22px -8px rgba(91,108,245,.8);
-    transition:transform .12s; }
-  .addbig:active{ transform:scale(.985); }
+  /* One primary action at full width, one compact secondary beside it. Both are sized by
+     the flex row — a width:100% here fought the row and pushed the pair off the screen. */
+  .addbar-inner{ max-width:480px; margin:0 auto; display:flex; gap:10px; align-items:stretch; }
+  .addbig{ flex:1; min-width:0; display:flex; align-items:center; justify-content:center;
+    gap:9px; border:none; border-radius:18px; background:var(--blue); color:#fff;
+    height:58px; padding:0 18px; font-size:17px; font-weight:600; white-space:nowrap;
+    box-shadow:0 8px 22px -8px rgba(91,108,245,.8); transition:transform .12s; }
+  .addbig:active{ transform:scale(.98); }
   .addbig .plus{ font-size:22px; font-weight:500; line-height:1; }
-  .addbig.ghost{ background:var(--card); color:var(--blue);
-    box-shadow:0 4px 18px -8px rgba(24,28,50,.5); }
+  .addcheck{ flex:none; width:58px; height:58px; border:none; border-radius:18px;
+    background:var(--card); color:var(--blue); display:grid; place-items:center;
+    box-shadow:0 4px 18px -10px rgba(24,28,50,.65); transition:transform .12s; }
+  .addcheck:active{ transform:scale(.94); }
+  .addcheck svg{ width:24px; height:24px; fill:currentColor; }
 
   .verdict{ border-radius:14px; padding:13px 15px; margin-top:12px; font-size:15px;
     font-weight:600; text-align:center; }
@@ -326,10 +331,10 @@
 
 <div class="addbar">
   <div class="addbar-inner">
-    <div style="display:flex; gap:9px">
-      <button class="addbig" id="openPad" style="flex:1"><span class="plus">+</span><span>הוספת הוצאה</span></button>
-      <button class="addbig ghost" id="openCheck" style="flex:none; padding-inline:16px">בדיקה</button>
-    </div>
+    <button class="addbig" id="openPad"><span class="plus">+</span><span>הוספת הוצאה</span></button>
+    <button class="addcheck" id="openCheck" aria-label="בדיקה לפני קנייה">
+      <svg viewBox="0 0 24 24"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2m0 3v3h10V5zm.5 6a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m-9 4a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5"/></svg>
+    </button>
   </div>
 </div>
 
@@ -387,6 +392,15 @@
     <label for="budgetInput">תקציב חודשי לכרטיסי אשראי</label>
     <input type="number" id="budgetInput" inputmode="numeric" step="100" min="0" dir="ltr" placeholder="9300">
     <div class="hint" id="budgetHint"></div>
+  </div>
+
+  <div class="field" style="margin-top:14px">
+    <label>תקציב אוטומטי מההיסטוריה</label>
+    <div class="hint" id="historyLine">עוד לא נמשכה היסטוריה.</div>
+    <div class="stack" style="margin-top:10px">
+      <button class="btn btn-primary hidden" id="recShowBtn">הצג את ההצעה</button>
+      <button class="btn btn-ghost" id="rebuildBtn">משוך היסטוריה מחדש</button>
+    </div>
   </div>
 
   <hr style="border:none; border-top:1px solid #E4E6EC; margin:22px 0 20px">
@@ -578,19 +592,45 @@ async function fetchMonth(ym){
   return (await res.json()).transactions;
 }
 
-async function backfill(){
-  if(history.builtFor===ymNow()) return;          // already done for this month
+async function backfill(force){
+  if(!force && history.builtFor===ymNow()) return;   // already done for this month
   const months=[];
+  history.error=null;
   for(let i=1;i<=HISTORY_MONTHS;i++){
+    const ym=ymShift(-i);
     try{
-      const ym=ymShift(-i);
       months.push(Object.assign({ym},summarise(await fetchMonth(ym))));
-      history.months=months.slice();               // keep what we have if a later call dies
+      history.months=months.slice();                 // keep what we have if a later call dies
       save();
       await new Promise(r=>setTimeout(r,400));
-    }catch(e){ break; }
+    }catch(e){
+      // A rate limit is worth one patient retry; anything else ends the run, and either
+      // way the reason is recorded — a silent stop leaves the user staring at nothing.
+      if(String(e.message).includes('429')){
+        await new Promise(r=>setTimeout(r,4000));
+        try{ months.push(Object.assign({ym},summarise(await fetchMonth(ym)))); history.months=months.slice(); save(); continue; }
+        catch(e2){ e=e2; }
+      }
+      history.error=e.message||'שגיאה'; break;
+    }
   }
-  if(months.length){ history.builtFor=ymNow(); save(); maybeOfferBudget(); }
+  history.builtFor=ymNow(); save();
+  historyLine();
+  if(months.length>=MIN_MONTHS) maybeOfferBudget();
+}
+
+// Says what the history actually did. Without this a failed backfill is indistinguishable
+// from an app that simply ignored you.
+function historyLine(){
+  const el=$('historyLine'); if(!el) return;
+  const n=(history.months||[]).length;
+  const d=derive();
+  if(history.error) el.innerHTML='<b>לא הצלחתי למשוך היסטוריה</b><br>'+esc(history.error)+' · נטענו '+n+' חודשים';
+  else if(!n) el.textContent='עוד לא נמשכה היסטוריה.';
+  else if(n<MIN_MONTHS) el.textContent='נטענו '+n+' חודשים בלבד. צריך לפחות '+MIN_MONTHS+' כדי להציע תקציב.';
+  else if(derived) el.innerHTML='התקציב הנגזר פעיל, לפי '+n+' חודשים.';
+  else el.innerHTML='נטענו '+n+' חודשים. ההצעה מוכנה: <b>'+fmt(d.total)+' לחודש</b>.';
+  $('recShowBtn').classList.toggle('hidden', !d || !!derived);
 }
 
 // committed is lumpy by nature, so its reserve is the mean. big is skewed by one travel
@@ -933,6 +973,7 @@ function openSheet(){
   $('baseInput').value=apiCfg.base||'';
   $('budgetInput').value = monthlyBudget!=null ? Math.round(monthlyBudget) : '';
   budgetHint(monthlyBudget);
+  historyLine();
   $('scrim').classList.add('open'); $('sheet').classList.add('open');
 }
 function closeSheet(){ $('scrim').classList.remove('open'); $('sheet').classList.remove('open'); }
@@ -944,6 +985,20 @@ $('statusChip').addEventListener('click',openSheet);
 $('onboardBtn').addEventListener('click',openSheet);
 $('scrim').addEventListener('click',closeSheet);
 $('sheetCloseBtn').addEventListener('click',closeSheet);
+
+$('recShowBtn').addEventListener('click',()=>{
+  const d=derive(); if(!d) return;
+  closeSheet(); showRec(d);
+});
+
+$('rebuildBtn').addEventListener('click',async ()=>{
+  $('rebuildBtn').disabled=true;
+  $('historyLine').textContent='מושך היסטוריה…';
+  history={months:[],builtFor:null,error:null}; offered=null; save();
+  await backfill(true);
+  $('rebuildBtn').disabled=false;
+  toast(history.error?'המשיכה נכשלה':'נטענו '+history.months.length+' חודשים');
+});
 
 $('budgetInput').addEventListener('input',()=>budgetHint(parseFloat($('budgetInput').value)));
 
