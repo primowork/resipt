@@ -350,6 +350,16 @@
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-label="הגדרות">
   <div class="grab"></div>
+
+  <h3>התקציב שלי</h3>
+  <div class="field" style="margin-top:12px">
+    <label for="budgetInput">תקציב חודשי לכרטיסי אשראי</label>
+    <input type="number" id="budgetInput" inputmode="numeric" step="100" min="0" dir="ltr" placeholder="9300">
+    <div class="hint" id="budgetHint"></div>
+  </div>
+
+  <hr style="border:none; border-top:1px solid #E4E6EC; margin:22px 0 20px">
+
   <h3>חיבור לרייזאפ</h3>
   <p class="lead" id="sheetStatus">האפליקציה מושכת את חיובי האשראי של החודש ישירות מהתזרים שלך.</p>
 
@@ -385,12 +395,14 @@
       </div>
     </div>
   </details>
+
+  <button class="btn btn-ghost" id="sheetCloseBtn" style="margin-top:20px">סגירה</button>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-const DAILY = 300;
+const DEFAULT_DAILY = 300;   // used only until a budget is set
 const MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 // First letters of the day names collide — four of seven are "ש" — so the chart uses
@@ -402,6 +414,7 @@ let manualData = [];
 let apiCfg = {token:'', base:''};
 let lastSync = null;
 let chartDay = null;   // day-of-month whose bar is expanded in the chart, null = closed
+let monthlyBudget = null;   // ₪ per month for card spending; null = the DEFAULT_DAILY rate
 
 const $ = id => document.getElementById(id);
 function fmt(n){ return '₪'+Math.abs(Math.round(n)).toLocaleString('en-US'); }
@@ -413,6 +426,7 @@ function save(){ try{
   localStorage.setItem('fileData',JSON.stringify(fileData));
   localStorage.setItem('apiCfg',JSON.stringify(apiCfg));
   localStorage.setItem('lastSync',lastSync?String(lastSync):'');
+  localStorage.setItem('monthlyBudget',monthlyBudget!=null?String(monthlyBudget):'');
 }catch(e){} }
 function load(){ try{
   const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m);
@@ -424,6 +438,7 @@ function load(){ try{
   const f=localStorage.getItem('fileData'); if(f) fileData=JSON.parse(f);
   const c=localStorage.getItem('apiCfg'); if(c) apiCfg=Object.assign({token:'',base:''},JSON.parse(c));
   const s=localStorage.getItem('lastSync'); if(s) lastSync=parseInt(s,10)||null;
+  const bg=localStorage.getItem('monthlyBudget'); if(bg) monthlyBudget=parseFloat(bg)||null;
 }catch(e){} }
 
 /* ---------------- CSV (fallback) ---------------- */
@@ -555,13 +570,16 @@ function calc(){
   const spentMonth=fileData.reduce((s,x)=>s+x.amt,0);
   const daysLeft=daysInMonth-dom;
 
-  const totalBudget=DAILY*daysInMonth;
+  // The budget is monthly, so the daily target is whatever it divides into across this
+  // month's length. Unset, it falls back to the rate the app shipped with.
+  const totalBudget = monthlyBudget!=null ? monthlyBudget : DEFAULT_DAILY*daysInMonth;
+  const target = totalBudget/daysInMonth;
   // Today is one of the days the remaining budget has to cover. Dividing by daysLeft
   // (which counts only the days after today) while still letting today spend the result
   // overshoots the month by one day's worth, and on the last day it divided by zero and
   // reported that nothing at all could be spent.
   const daysToCover=daysLeft+1;
-  const dynamicCeiling=Math.min(DAILY,Math.max(0,(totalBudget-spentMonth)/daysToCover));
+  const dynamicCeiling=Math.min(target,Math.max(0,(totalBudget-spentMonth)/daysToCover));
   const remaining=dynamicCeiling-spentToday;
   const avg=dom>0?spentMonth/dom:0;
 
@@ -571,7 +589,7 @@ function calc(){
   const projectedDiff=totalBudget-projected;
 
   return {now,m,dom,daysInMonth,remaining,spentToday,spentMonth,allToday,avg,daysLeft,
-          dynamicCeiling,projected,projectedDiff};
+          dynamicCeiling,projected,projectedDiff,totalBudget,target};
 }
 
 /* ---------------- render ---------------- */
@@ -612,8 +630,8 @@ function render(animate){
 
   const avgEl=$('avgDaily');
   avgEl.textContent=fmt(c.avg);
-  avgEl.className='val num '+(c.avg>DAILY?'neg':'pos');
-  $('avgNote').textContent=c.avg>DAILY?'מעל היעד של ₪300':'מתחת ליעד של ₪300';
+  avgEl.className='val num '+(c.avg>c.target?'neg':'pos');
+  $('avgNote').textContent=(c.avg>c.target?'מעל היעד של ':'מתחת ליעד של ')+fmt(c.target);
 
   $('daysLeft').textContent=c.daysLeft;
 
@@ -656,7 +674,7 @@ function renderChart(c){
 
   // Scale to the goal at minimum, so an ordinary week doesn't stretch to fill the card
   // and every bar reads against the same ₪300 line.
-  const max=Math.max(DAILY,...days.map(x=>x.total))*1.1;
+  const max=Math.max(c.target,...days.map(x=>x.total))*1.1;
 
   // The goal line lives in the chart's frame while the bars live in the track's, so its
   // offset is resolved here in pixels against the same track height the bars use.
@@ -664,11 +682,11 @@ function renderChart(c){
   const track=parseFloat(cs.getPropertyValue('--track'));
   const below=parseFloat(cs.getPropertyValue('--lbl'))+parseFloat(cs.getPropertyValue('--gap'));
 
-  $('chart').innerHTML='<div class="goal" style="bottom:'+(below+DAILY/max*track)+'px"><span>'+DAILY+'</span></div>'
+  $('chart').innerHTML='<div class="goal" style="bottom:'+(below+c.target/max*track)+'px"><span>'+Math.round(c.target)+'</span></div>'
     + days.map(x=>{
         const dt=new Date(c.now.getFullYear(),c.now.getMonth(),x.d);
         const h=x.total>0?Math.max(3,x.total/max*track):3;
-        return '<div class="col'+(x.total>DAILY?' over':'')+(x.d===c.dom?' today':'')
+        return '<div class="col'+(x.total>c.target?' over':'')+(x.d===c.dom?' today':'')
           + (x.d===chartDay?' sel':'')+'" data-day="'+x.d+'">'
           + '<span class="v">'+(x.total>0?Math.round(x.total):'')+'</span>'
           + '<div class="track"><div class="b'+(x.total>0?'':' zero')+'" style="height:'+h+'px"></div></div>'
@@ -740,9 +758,20 @@ function renderInvestigation(){
 }
 
 /* ---------------- sheet ---------------- */
+// Pure: takes the figure to describe rather than reading the saved one, so the hint can
+// preview a value being typed without touching the budget the app is currently using.
+function budgetHint(v){
+  const now=new Date(), dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const total=(v!=null && isFinite(v) && v>0) ? v : DEFAULT_DAILY*dim;
+  $('budgetHint').innerHTML='זה יוצא <b>'+fmt(total/dim)+' ליום</b> ב-'+dim+' ימי החודש.'
+    + '<br>נספרים רק חיובי אשראי — הוצאות ישירות מהבנק לא נכנסות לתקציב הזה.';
+}
+
 function openSheet(){
   $('tokenInput').value=apiCfg.token||'';
   $('baseInput').value=apiCfg.base||'';
+  $('budgetInput').value = monthlyBudget!=null ? Math.round(monthlyBudget) : '';
+  budgetHint(monthlyBudget);
   $('scrim').classList.add('open'); $('sheet').classList.add('open');
 }
 function closeSheet(){ $('scrim').classList.remove('open'); $('sheet').classList.remove('open'); }
@@ -753,6 +782,16 @@ $('openSettings').addEventListener('click',openSheet);
 $('statusChip').addEventListener('click',openSheet);
 $('onboardBtn').addEventListener('click',openSheet);
 $('scrim').addEventListener('click',closeSheet);
+$('sheetCloseBtn').addEventListener('click',closeSheet);
+
+$('budgetInput').addEventListener('input',()=>budgetHint(parseFloat($('budgetInput').value)));
+
+$('budgetInput').addEventListener('change',()=>{
+  const v=parseFloat($('budgetInput').value);
+  monthlyBudget = (isFinite(v)&&v>0) ? v : null;   // blank restores the default rate
+  save(); render(true); budgetHint(monthlyBudget);
+  toast(monthlyBudget!=null?'התקציב עודכן':'חזרה לתקציב ברירת המחדל');
+});
 
 $('saveCfgBtn').addEventListener('click',()=>{
   apiCfg.token=$('tokenInput').value.trim();
