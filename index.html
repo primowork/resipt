@@ -136,6 +136,19 @@
   .col.over .v{ color:var(--orange); font-weight:600; }
   .col .d{ height:var(--lbl); flex:none; font-size:12px; color:var(--ink-3); line-height:var(--lbl); }
   .col.today .d{ color:var(--blue); font-weight:700; }
+  /* today's letter is already blue, so selection has to read as a shape, not a colour */
+  .col.sel .d{ background:var(--blue); color:#fff; font-weight:700; border-radius:999px;
+    min-width:20px; padding-inline:6px; }
+  .col{ cursor:pointer; }
+
+  .day-head{ display:flex; align-items:center; gap:10px; margin:18px 0 2px;
+    padding-top:16px; border-top:1px solid var(--line); }
+  .day-head .t{ flex:1; font-size:16px; font-weight:600; }
+  .day-head .s{ font-size:17px; font-weight:700; color:var(--orange);
+    font-variant-numeric:tabular-nums; direction:ltr; }
+  .day-head .x{ width:28px; height:28px; flex:none; border:none; border-radius:50%;
+    background:var(--bg); color:var(--ink-3); font-size:14px; line-height:1;
+    display:grid; place-items:center; }
 
   .linkbtn{ background:none; border:none; color:var(--blue); font-size:15px; font-weight:600;
     padding:14px 0 0; width:100%; text-align:center; }
@@ -284,6 +297,7 @@
     </div>
     <p class="card-s" style="font-size:13.5px">לפי מה שנקלט ברייזאפ</p>
     <div class="chart" id="chart"></div>
+    <div id="dayDetail" class="hidden"></div>
   </div>
 
   <div class="card">
@@ -377,6 +391,7 @@ let fileData = [];
 let manualData = [];
 let apiCfg = {token:'', base:''};
 let lastSync = null;
+let chartDay = null;   // day-of-month whose bar is expanded in the chart, null = closed
 
 const $ = id => document.getElementById(id);
 function fmt(n){ return '₪'+Math.abs(Math.round(n)).toLocaleString('en-US'); }
@@ -616,13 +631,13 @@ function renderChart(c){
   card.classList.remove('hidden');
 
   const from=Math.max(1,c.dom-6), days=[];
+  // A selection made yesterday can fall out of the window once the day rolls over.
+  if(chartDay!==null && (chartDay<from || chartDay>c.dom)) chartDay=null;
   for(let d=from;d<=c.dom;d++){
     const total = d===c.dom ? c.spentToday : fileData.filter(x=>x.d===d).reduce((s,x)=>s+x.amt,0);
     days.push({d,total});
   }
 
-  // Scale to the goal at minimum, so an ordinary week doesn't stretch to fill the card
-  // and every bar reads against the same ₪300 line.
   // Scale to the goal at minimum, so an ordinary week doesn't stretch to fill the card
   // and every bar reads against the same ₪300 line.
   const max=Math.max(DAILY,...days.map(x=>x.total))*1.1;
@@ -637,11 +652,39 @@ function renderChart(c){
     + days.map(x=>{
         const dt=new Date(c.now.getFullYear(),c.now.getMonth(),x.d);
         const h=x.total>0?Math.max(3,x.total/max*track):3;
-        return '<div class="col'+(x.total>DAILY?' over':'')+(x.d===c.dom?' today':'')+'">'
+        return '<div class="col'+(x.total>DAILY?' over':'')+(x.d===c.dom?' today':'')
+          + (x.d===chartDay?' sel':'')+'" data-day="'+x.d+'">'
           + '<span class="v">'+(x.total>0?Math.round(x.total):'')+'</span>'
           + '<div class="track"><div class="b'+(x.total>0?'':' zero')+'" style="height:'+h+'px"></div></div>'
           + '<span class="d">'+DAY_LETTERS[dt.getDay()]+'</span></div>';
       }).join('');
+
+  renderDayDetail(c);
+}
+
+// What was actually bought on the day whose bar was tapped. Today reads from allToday
+// so it carries the wheel's provisional entry and agrees with its own bar.
+function renderDayDetail(c){
+  const box=$('dayDetail');
+  if(chartDay===null){ box.classList.add('hidden'); box.innerHTML=''; return; }
+
+  const items = chartDay===c.dom
+    ? c.allToday.map(x=>({name:x.name,amt:x.amt,manual:x.manual}))
+    : fileData.filter(x=>x.d===chartDay).map(x=>({name:x.name,amt:x.amt}));
+  items.sort((a,b)=>b.amt-a.amt);
+
+  const total=items.reduce((s,x)=>s+x.amt,0);
+  const dt=new Date(c.now.getFullYear(),c.now.getMonth(),chartDay);
+
+  box.innerHTML='<div class="day-head"><button class="x" id="dayClose" aria-label="סגירה">✕</button>'
+    + '<span class="t">יום '+DAYS[dt.getDay()]+', '+chartDay+' ב'+MONTHS[c.m]+'</span>'
+    + (total>0?'<span class="s num">-'+fmt(total)+'</span>':'')+'</div>'
+    + (items.length
+        ? items.map(x=>'<div class="row"><span class="lbl"><b>'+esc(x.name||'הוצאה')+'</b>'
+            + (x.manual?'<span class="sub">רישום זמני</span>':'')+'</span>'
+            + '<span class="val neg num">-'+fmt(x.amt)+'</span></div>').join('')
+        : '<div class="blank"><div class="t">לא יצא כסף ביום הזה</div></div>');
+  box.classList.remove('hidden');
 }
 
 function renderInvestigation(){
@@ -786,6 +829,19 @@ $('todayList').addEventListener('click',e=>{
   const btn=e.target.closest('.del'); if(!btn) return;
   manualData=manualData.filter(x=>x.id!==parseInt(btn.dataset.id,10));
   save(); render(true); toast('נמחק');
+});
+
+$('chart').addEventListener('click',e=>{
+  if(e.target.closest('#dayClose')){ chartDay=null; renderChart(calc()); return; }
+  const col=e.target.closest('.col'); if(!col) return;
+  const d=parseInt(col.dataset.day,10);
+  chartDay = chartDay===d ? null : d;   // tapping the open day again closes it
+  renderChart(calc());
+});
+
+$('dayDetail').addEventListener('click',e=>{
+  if(!e.target.closest('#dayClose')) return;
+  chartDay=null; renderChart(calc());
 });
 
 $('investigateBtn').addEventListener('click',()=>{
