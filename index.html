@@ -119,6 +119,12 @@
   .banner b{ font-weight:700; }
   .banner .ic{ flex:none; width:22px; height:22px; border-radius:50%; background:var(--orange);
     color:#fff; font-size:15px; font-weight:700; line-height:22px; text-align:center; }
+  .banner .grow{ flex:1; min-width:0; }
+  .banner .acts{ display:block; margin-top:9px; }
+  .banner .acts .linkbtn{ width:auto; padding:0; color:inherit; font-weight:700;
+    text-decoration:underline; text-underline-offset:3px; }
+  .banner .x{ flex:none; width:24px; height:24px; margin:-3px -4px 0 0; border:none; padding:0;
+    background:none; color:inherit; opacity:.55; font-size:15px; line-height:24px; }
 
   /* ---------- 7-day chart ---------- */
   /* The bar track is a fixed height shared by every column and by the goal line, so a
@@ -303,6 +309,13 @@
 
   <div class="card">
     <div class="head-line"><div class="card-t">ההוצאות של היום</div></div>
+    <div class="banner info hidden" id="dupWarn">
+      <span class="ic">↻</span>
+      <span class="grow"><span id="dupText"></span>
+        <span class="acts"><button class="linkbtn" id="dupClear">מחק את הרישומים שלי</button></span>
+      </span>
+      <button class="x" id="dupDismiss" aria-label="סגירה">✕</button>
+    </div>
     <div id="todayList"></div>
   </div>
 
@@ -463,6 +476,9 @@ let monthlyBudget = null;   // ₪ per month for card spending; null = the DEFAU
 let history = {months:[], builtFor:null};   // per-month tier totals from the backfill
 let derived = null;         // the applied three-tier budget, null = plain monthly budget
 let offered = null;         // ym the recommendation was already shown for
+// The RiseUp today-total the duplicate warning was last dismissed at, so closing it
+// silences that arrival without silencing the next one. {ym,d,at}
+let dupSeen = null;
 
 const $ = id => document.getElementById(id);
 function fmt(n){ return '₪'+Math.abs(Math.round(n)).toLocaleString('en-US'); }
@@ -478,6 +494,7 @@ function save(){ try{
   localStorage.setItem('history',JSON.stringify(history));
   localStorage.setItem('derived',derived?JSON.stringify(derived):'');
   localStorage.setItem('offered',offered||'');
+  localStorage.setItem('dupSeen',dupSeen?JSON.stringify(dupSeen):'');
 }catch(e){} }
 function load(){ try{
   const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m);
@@ -493,6 +510,12 @@ function load(){ try{
   const h=localStorage.getItem('history'); if(h) history=Object.assign({months:[],builtFor:null},JSON.parse(h));
   const dv=localStorage.getItem('derived'); if(dv) derived=JSON.parse(dv);
   offered=localStorage.getItem('offered')||null;
+  const ds=localStorage.getItem('dupSeen'); if(ds) dupSeen=JSON.parse(ds);
+  // The dismissal belongs to the day it was made on, like the entries it silenced.
+  if(dupSeen && !(dupSeen.ym===ym && dupSeen.d===n.getDate())) dupSeen=null;
+  // Entries written before this field existed would otherwise read as base 0 and make
+  // every charge RiseUp has already reported today look like it just arrived.
+  for(const e of manualData) if(typeof e.base!=='number') e.base=riseupToday();
 }catch(e){} }
 
 /* ---------------- CSV (fallback) ---------------- */
@@ -707,6 +730,32 @@ function refreshStatus(){
 }
 
 /* ---------------- calc ---------------- */
+// What RiseUp has reported for today so far. Stamped onto every manual entry when it is
+// made, so the app can tell later whether new money for today has landed since.
+function riseupToday(){
+  const dom=new Date().getDate();
+  return fileData.reduce((s,x)=>x.d===dom?s+x.amt:s,0);
+}
+
+// A manual entry is a stand-in for a charge RiseUp hasn't delivered yet. Once RiseUp
+// reports more of today's money than it had when the entry was made, the stand-in and
+// the real charge are both on screen and today reads double.
+//
+// The test is the arrival of new money, not a match between amounts: an entry of ₪50 for
+// a charge that settles at ₪47.30 is the ordinary case, and any amount-matching rule
+// misses exactly there. Nothing is removed automatically — this only decides whether to
+// offer.
+function dupState(){
+  const ym=ymNow(), dom=new Date().getDate();
+  const mine=manualData.filter(e=>e.ym===ym && e.d===dom);
+  if(mine.length===0) return null;
+  const now=riseupToday();
+  const since=Math.max(...mine.map(e=>e.base||0));
+  const floor=dupSeen?Math.max(since,dupSeen.at):since;
+  const arrived=now-floor;
+  return arrived>0 ? {arrived,count:mine.length,at:now} : null;
+}
+
 function calc(){
   const now=new Date(), y=now.getFullYear(), m=now.getMonth(), dom=now.getDate();
   const daysInMonth=new Date(y,m+1,0).getDate();
@@ -791,6 +840,14 @@ function render(animate){
   list.innerHTML = c.allToday.length>0
     ? c.allToday.map(x=>`<div class="row">${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${x.manual?'<span class="sub">רישום זמני</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('')
     : '<div class="blank"><div class="t">עוד לא נרשמה הוצאה היום</div></div>';
+
+  const dup=dupState(), dw=$('dupWarn');
+  dw.classList.toggle('hidden',!dup);
+  // No full stop after the amount: in RTL it lands on the wrong side of the digits when
+  // the line wraps there.
+  if(dup) $('dupText').innerHTML='רייזאפ עדכן חיובים של היום — <b>'+fmt(dup.arrived)+'</b><br>'
+    + '<span style="opacity:.85">'+(dup.count===1?'הרישום הזמני שרשמת עלול':'הרישומים הזמניים שרשמת עלולים')
+    + ' להופיע עכשיו פעמיים.</span>';
 
   $('monthSpent').textContent=fmt(c.spentMonth);
 
@@ -1143,8 +1200,24 @@ $('padSave').addEventListener('click',()=>{
   const v=wheelValue();
   if(v<=0) return;
   const n=new Date();
-  manualData.push({id:Date.now(),amt:v,desc:$('padDesc').value.trim(),ym:ymNow(),d:n.getDate()});
+  manualData.push({id:Date.now(),amt:v,desc:$('padDesc').value.trim(),ym:ymNow(),d:n.getDate(),base:riseupToday()});
   closePad(); save(); render(true); toast('נוסף '+fmt(v));
+});
+
+$('dupClear').addEventListener('click',()=>{
+  const ym=ymNow(), dom=new Date().getDate();
+  const n=manualData.filter(e=>e.ym===ym && e.d===dom).length;
+  manualData=manualData.filter(e=>!(e.ym===ym && e.d===dom));
+  dupSeen=null; save(); render(true);
+  toast(n===1?'הרישום נמחק':'נמחקו '+n+' רישומים');
+});
+
+// Dismissal is pinned to the amount RiseUp had reported at that moment, so the warning
+// stays down for this arrival but still speaks up for the next one.
+$('dupDismiss').addEventListener('click',()=>{
+  const d=dupState(); if(!d) return;
+  dupSeen={ym:ymNow(),d:new Date().getDate(),at:d.at};
+  save(); render(false);
 });
 
 $('todayList').addEventListener('click',e=>{
@@ -1179,7 +1252,7 @@ $('investigateBtn').addEventListener('click',()=>{
 
 $('clearBtn').addEventListener('click',()=>{
   if(!confirm('למחוק את כל הנתונים? אי אפשר לשחזר.')) return;
-  manualData=[]; fileData=[]; lastSync=null; save();
+  manualData=[]; fileData=[]; lastSync=null; dupSeen=null; save();
   $('investigatePanel').classList.add('hidden');
   closeSheet(); render(); toast('הכל אופס');
 });
