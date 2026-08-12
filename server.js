@@ -30,10 +30,23 @@ const STATIC = {
   '/manifest.json': ['manifest.json', 'application/manifest+json; charset=utf-8'],
 };
 
+// What is actually running. "Did it deploy?" was previously answered by squinting at the
+// screen and guessing from which buttons were there, which is no answer at all when the
+// question is whether a push arrived. Railway injects these; locally they're absent and
+// the app just doesn't show the line.
+const VERSION = {
+  sha: (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7),
+  branch: process.env.RAILWAY_GIT_BRANCH || '',
+  // Process start, not build time: it is the moment this code began serving, which is the
+  // thing being asked about.
+  startedAt: new Date().toISOString(),
+};
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
 
   if (url.pathname.startsWith('/api/riseup/')) return relay(req, res, url);
+  if (url.pathname === '/api/version') return json(res, 200, VERSION);
 
   const entry = STATIC[url.pathname];
   if (!entry || req.method !== 'GET') return send(res, 404, 'text/plain; charset=utf-8', 'Not found');
