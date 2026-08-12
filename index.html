@@ -190,6 +190,16 @@
     box-shadow:0 8px 22px -8px rgba(91,108,245,.8); transition:transform .12s; }
   .addbig:active{ transform:scale(.98); }
   .addbig .plus{ font-size:22px; font-weight:500; line-height:1; }
+  /* Each choice says what it does to the money, so the tiers don't have to be known
+     in advance to be chosen between. */
+  .tier-opt{ text-align:center; line-height:1.35; }
+  .tier-opt .sub{ display:block; font-size:13px; font-weight:400; color:var(--ink-3); margin-top:3px; }
+  .tier-opt.on{ background:var(--blue); color:#fff; }
+  .tier-opt.on .sub{ color:rgba(255,255,255,.85); }
+  /* A row that can be re-filed says so by responding to the touch. */
+  .row.tap{ cursor:pointer; }
+  .row.tap:active{ opacity:.55; }
+
   .verdict{ border-radius:14px; padding:13px 15px; margin-top:12px; font-size:15px;
     font-weight:600; text-align:center; }
   .verdict.ok{ background:var(--green-soft); color:#1F6E48; }
@@ -385,6 +395,19 @@
   <button class="btn btn-ghost" id="dayCloseBtn" style="margin-top:18px">סגירה</button>
 </div>
 
+<div class="scrim" id="tierScrim"></div>
+<div class="sheet" id="tierSheet" role="dialog" aria-label="שיוך לקופה">
+  <div class="grab"></div>
+  <h3 id="tierName"></h3>
+  <p class="lead">לאיזו קופה זה שייך? השיוך נשמר לפי שם בית העסק, וגם החיובים הבאים ממנו ילכו לשם.</p>
+  <div class="stack" style="margin-top:16px">
+    <button class="btn btn-ghost tier-opt" data-tier="daily">הוצאה יומית<span class="sub">נוגסת בכסף שנשאר לך להיום</span></button>
+    <button class="btn btn-ghost tier-opt" data-tier="big">קנייה גדולה<span class="sub">יוצאת מהקופה לקניות גדולות</span></button>
+    <button class="btn btn-ghost tier-opt" data-tier="committed">הוצאה קבועה<span class="sub">שמורה מראש, לא נוגעת בכסף היומי</span></button>
+  </div>
+  <button class="btn btn-ghost" id="tierClose" style="margin-top:18px">ביטול</button>
+</div>
+
 <div class="scrim" id="padScrim"></div>
 <div class="sheet pad" id="padSheet" role="dialog" aria-label="הוספת הוצאה">
   <div class="grab"></div>
@@ -514,6 +537,8 @@ let dupSeen = null;
 // ₪ to keep back each month. It comes off the daily-decisions tier alone, so the budget
 // is always the measured baseline minus this. null = spend at the measured rate.
 let savingsGoal = null;
+// {merchant: 'committed'|'big'|'daily'} — a manual answer that beats the automatic tier.
+let overrides = {};
 
 // One record per pre-purchase check above CHECK_MIN. This is the only place the app learns
 // what someone was about to do with their money before they did it.
@@ -535,6 +560,7 @@ function save(){ try{
   localStorage.setItem('offered',offered||'');
   localStorage.setItem('dupSeen',dupSeen?JSON.stringify(dupSeen):'');
   localStorage.setItem('savingsGoal',savingsGoal!=null?String(savingsGoal):'');
+  localStorage.setItem('overrides',JSON.stringify(overrides));
   localStorage.setItem('checks',JSON.stringify(checks));
 }catch(e){} }
 function load(){ try{
@@ -553,6 +579,7 @@ function load(){ try{
   offered=localStorage.getItem('offered')||null;
   const ds=localStorage.getItem('dupSeen'); if(ds) dupSeen=JSON.parse(ds);
   const sg=localStorage.getItem('savingsGoal'); if(sg) savingsGoal=parseFloat(sg)||null;
+  const ov=localStorage.getItem('overrides'); if(ov) overrides=JSON.parse(ov)||{};
   const ck=localStorage.getItem('checks'); if(ck) checks=JSON.parse(ck);
   // The tally is monthly, like everything else on that card.
   checks=checks.filter(c=>c.ym===ym);
@@ -566,7 +593,19 @@ function load(){ try{
   // Entries written before this field existed would otherwise read as base 0 and make
   // every charge RiseUp has already reported today look like it just arrived.
   for(const e of manualData) if(typeof e.base!=='number') e.base=riseupToday();
+  retier();
 }catch(e){} }
+
+// Overrides apply to what is already on screen, not only to whatever the next sync
+// brings — a correction made now that waited for the next poll to take effect would look
+// like it hadn't worked. Charges stored before kind0 existed adopt their current tier as
+// the automatic one, which is what it was.
+function retier(){
+  for(const x of fileData){
+    if(x.kind0==null) x.kind0 = x.kind || (x.amt>=BIG_MIN?'big':'daily');
+    x.kind = tierOverride(x.name) || x.kind0;
+  }
+}
 
 /* ---------------- CSV (fallback) ---------------- */
 function parseCSV(text){
@@ -592,7 +631,11 @@ function ingestCSV(rows){
     const amt=parseFloat(row[idx['סכום']]); if(isNaN(amt)||amt>=0) continue;
     const d=parseDMY(row[idx['תאריך התשלום']]);
     if(!d||d.getFullYear()!==cy||d.getMonth()!==cm) continue;
-    out.push({name:row[idx['שם העסק']]||'',amt:Math.abs(amt),d:d.getDate()});
+    // A CSV carries no commitment fields, so the amount is all there is to go on — which
+    // is exactly the case an override is for.
+    const name=row[idx['שם העסק']]||'', a=Math.abs(amt);
+    out.push({name,amt:a,d:d.getDate(),kind0:a>=BIG_MIN?'big':'daily',
+              kind:tierOverride(name)||(a>=BIG_MIN?'big':'daily')});
   }
   fileData=out;
 }
@@ -613,7 +656,19 @@ const BIG_MIN = 1000;
 // one-offs separately — "already spent" otherwise hides the difference between a month
 // lived expensively and three purchases that happened to fall under the line.
 const ONEOFF_MIN = 300;
-function tierOf(t,amt){
+
+// And where the threshold is wrong, it can be overruled. RiseUp knows what it has been
+// told; it does not know that ₪800 to a psychologist is a standing commitment rather
+// than a splurge. The override is keyed by merchant, not by charge, because the answer
+// is a fact about the merchant and next month's charge deserves it too.
+function tierOverride(name){
+  const k=(name||'').trim();
+  return k && overrides[k] ? overrides[k] : null;
+}
+function tierOf(t,amt,name){
+  return tierOverride(name) || baseTier(t,amt);
+}
+function baseTier(t,amt){
   if(t.commitmentId!=null || t.actualType==='fixed' || t.isInstallment) return 'committed';
   return amt>=BIG_MIN ? 'big' : 'daily';
 }
@@ -632,7 +687,10 @@ function mapApiTransactions(list){
     // anything carried into this cashflow month from earlier, so it counts toward the
     // month but never toward "today".
     const d = iso.slice(0,7)===ym ? parseInt(iso.slice(8,10),10) : 0;
-    out.push({name:t.businessName||'', amt, d, kind:tierOf(t,amt)});
+    // kind0 is what RiseUp's own fields say, kept so lifting an override restores it
+    // instead of leaving the charge stranded wherever the override put it.
+    const name=t.businessName||'';
+    out.push({name, amt, d, kind0:baseTier(t,amt), kind:tierOf(t,amt,name)});
   }
   return out;
 }
@@ -657,7 +715,7 @@ function summarise(list){
     if((x.sourceType||'')!=='creditCard') continue;
     const amt=Math.abs(Number(x.amount));
     if(!isFinite(amt)||amt<=0) continue;
-    t[tierOf(x,amt)]+=amt;
+    t[tierOf(x,amt,x.businessName)]+=amt;
   }
   return t;
 }
@@ -692,7 +750,8 @@ async function backfill(force){
       history.error=e.message||'שגיאה'; break;
     }
   }
-  history.builtFor=ymNow(); save();
+  // Freshly measured with whatever overrides are in force, so the warning has been answered.
+  history.builtFor=ymNow(); history.stale=false; save();
   historyLine();
   if(months.length>=MIN_MONTHS) maybeOfferBudget();
 }
@@ -708,6 +767,9 @@ function historyLine(){
   else if(n<MIN_MONTHS) el.textContent='נטענו '+n+' חודשים בלבד. צריך לפחות '+MIN_MONTHS+' כדי להציע תקציב.';
   else if(derived) el.innerHTML='התקציב הנגזר פעיל, לפי '+n+' חודשים.';
   else el.innerHTML='נטענו '+n+' חודשים. ההצעה מוכנה: <b>'+fmt(d.total)+' לחודש</b>.';
+  // A budget measured before a re-filing still counts the merchant in the old tier, and
+  // the reserve won't grow to meet it until the history is measured again.
+  if(history.stale && n) el.innerHTML+='<br><span class="warn">שינית שיוך של בית עסק. משיכת היסטוריה מחדש תעדכן את התקציב לפי הסיווג החדש.</span>';
   $('recShowBtn').classList.toggle('hidden', !d || !!derived);
 }
 
@@ -961,7 +1023,7 @@ function render(animate){
 
   const list=$('todayList');
   list.innerHTML = c.allToday.length>0
-    ? c.allToday.map(x=>`<div class="row">${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${x.manual?'<span class="sub">רישום זמני</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('')
+    ? c.allToday.map(x=>`<div class="row${x.manual?'':' tap'}"${x.manual?'':` data-merchant="${esc(x.name||'')}"`}>${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${x.manual?'<span class="sub">רישום זמני</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('')
     : '<div class="blank"><div class="t">עוד לא נרשמה הוצאה היום</div></div>';
 
   const dup=dupState(), dw=$('dupWarn');
@@ -1160,17 +1222,59 @@ function renderInvestigation(){
   }
   const grouped=Object.values(groups).filter(g=>g.count>=2).sort((a,b)=>b.total-a.total).slice(0,6);
 
-  let html='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">ההוצאות הגדולות</div></div>';
+  let html='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">ההוצאות הגדולות</div></div>'
+    + '<p class="card-s" style="font-size:13.5px; margin:0 0 4px">לחיצה על שורה משייכת אותה לקופה אחרת.</p>';
   // day: the day of the purchase, or 0 for a charge carried into this cashflow month
   // from an earlier purchase.
   const when = d => d>0 ? d+' ב'+MONTHS[new Date().getMonth()] : 'חיוב מקנייה קודמת';
-  html+=top.map(x=>`<div class="row"><span class="lbl"><b>${esc(x.name)}</b><span class="sub">${when(x.day)}</span></span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
+  const tierWord={committed:'קבועה',big:'קנייה גדולה',daily:'יומית'};
+  // Where the charge is filed belongs on the row: it is the thing the tap changes, and
+  // without it the panel gives no reason to suspect the psychologist is filed as coffee.
+  const filed = n => {
+    const k=(n||'').trim(), x=fileData.find(y=>(y.name||'').trim()===k);
+    const t=x?(x.kind||'daily'):'daily';
+    return tierWord[t]+(tierOverride(k)?' · שינית':'');
+  };
+  html+=top.map(x=>`<div class="row tap" data-merchant="${esc(x.name)}"><span class="lbl"><b>${esc(x.name)}</b><span class="sub">${when(x.day)} · ${filed(x.name)}</span></span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
   if(grouped.length){
     html+='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">חוזר על עצמו</div></div>';
-    html+=grouped.map(g=>`<div class="row"><span class="lbl"><b>${esc(g.name)}</b><span class="sub">${g.count} פעמים החודש</span></span><span class="val neg num">-${fmt(g.total)}</span></div>`).join('');
+    html+=grouped.map(g=>`<div class="row tap" data-merchant="${esc(g.name)}"><span class="lbl"><b>${esc(g.name)}</b><span class="sub">${g.count} פעמים החודש · ${filed(g.name)}</span></span><span class="val neg num">-${fmt(g.total)}</span></div>`).join('');
   }
   panel.innerHTML=html;
   panel.classList.remove('hidden');
+}
+
+/* ---------------- re-filing a merchant ---------------- */
+let tierTarget=null;
+
+function openTier(name){
+  const k=(name||'').trim(); if(!k) return;
+  tierTarget=k;
+  $('tierName').textContent=k;
+  const x=fileData.find(y=>(y.name||'').trim()===k);
+  const now=tierOverride(k) || (x?(x.kind||'daily'):'daily');
+  document.querySelectorAll('.tier-opt').forEach(b=>b.classList.toggle('on',b.dataset.tier===now));
+  $('tierScrim').classList.add('open'); $('tierSheet').classList.add('open');
+}
+function closeTier(){
+  tierTarget=null;
+  $('tierScrim').classList.remove('open'); $('tierSheet').classList.remove('open');
+}
+
+// Choosing the tier RiseUp already assigned clears the override rather than freezing it:
+// otherwise agreeing with the automatic answer would quietly pin the merchant to it.
+function setTier(tier){
+  const k=tierTarget; if(!k) return;
+  const x=fileData.find(y=>(y.name||'').trim()===k);
+  const auto=x?(x.kind0||'daily'):'daily';
+  if(tier===auto) delete overrides[k]; else overrides[k]=tier;
+  retier();
+  // The derived budget was measured before this correction, so its tiers still hold the
+  // old answer. Rebuilding is six API calls; it is offered, not taken.
+  history.stale = Object.keys(overrides).length>0;
+  closeTier(); save(); render(true); historyLine();
+  toast(tier==='daily' ? 'חזר להוצאה יומית'
+      : tier==='big'   ? 'הועבר לקניות גדולות' : 'הועבר להוצאות קבועות');
 }
 
 /* ---------------- budget recommendation ---------------- */
@@ -1492,10 +1596,25 @@ $('dupDismiss').addEventListener('click',()=>{
 });
 
 $('todayList').addEventListener('click',e=>{
-  const btn=e.target.closest('.del'); if(!btn) return;
-  manualData=manualData.filter(x=>x.id!==parseInt(btn.dataset.id,10));
-  save(); render(true); toast('נמחק');
+  const btn=e.target.closest('.del');
+  if(btn){
+    manualData=manualData.filter(x=>x.id!==parseInt(btn.dataset.id,10));
+    save(); render(true); toast('נמחק');
+    return;
+  }
+  const row=e.target.closest('[data-merchant]');
+  if(row) openTier(row.dataset.merchant);
 });
+
+// Delegated for the same reason as the chart: the panel is rebuilt through innerHTML.
+$('investigatePanel').addEventListener('click',e=>{
+  const row=e.target.closest('[data-merchant]');
+  if(row) openTier(row.dataset.merchant);
+});
+$('tierScrim').addEventListener('click',closeTier);
+$('tierClose').addEventListener('click',closeTier);
+document.querySelectorAll('.tier-opt').forEach(b=>
+  b.addEventListener('click',()=>setTier(b.dataset.tier)));
 
 // Delegated: the chart is rebuilt through innerHTML on every render, so per-column
 // listeners would be discarded on the next sync.
