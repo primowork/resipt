@@ -260,6 +260,7 @@
     box-shadow:0 1px 3px rgba(24,28,50,.07); }
   .field input:focus{ outline:none; border-color:var(--blue); }
   .field .hint{ font-size:14px; color:var(--ink-3); margin-top:8px; line-height:1.6; }
+  .field .hint .warn{ color:#A8431B; font-weight:600; }
   .stack{ display:flex; flex-direction:column; gap:10px; }
   details.adv{ margin-top:22px; border-top:1px solid #E4E6EC; padding-top:16px; }
   details.adv summary{ font-size:15px; color:var(--ink-2); font-weight:500; list-style:none; padding:6px 0; }
@@ -333,8 +334,9 @@
       <button class="linkbtn hidden" id="investigateBtn" style="width:auto; padding:0">לאן זה הלך ›</button>
     </div>
     <div class="row"><span class="lbl">יצא בכרטיסי אשראי</span><span class="val num" id="monthSpent">₪0</span></div>
-    <div class="row"><span class="lbl">ממוצע ליום<span class="sub" id="avgNote">היעד הוא ₪300</span></span><span class="val num" id="avgDaily">₪0</span></div>
+    <div class="row"><span class="lbl"><span id="avgLabel">ממוצע ליום</span><span class="sub" id="avgNote">היעד הוא ₪300</span></span><span class="val num" id="avgDaily">₪0</span></div>
     <div class="row"><span class="lbl">ימים שנותרו בחודש</span><span class="val num" id="daysLeft">—</span></div>
+    <div class="row hidden" id="goalRow"><span class="lbl">יעד חיסכון<span class="sub" id="goalNote"></span></span><span class="val num pos" id="goalVal"></span></div>
     <div class="row hidden" id="reservedRow"><span class="lbl">שמור מראש<span class="sub" id="reservedNote"></span></span><span class="val num" id="reservedVal"></span></div>
     <div class="banner hidden" id="forecast" style="margin:16px 0 0"></div>
     <div id="investigatePanel" class="hidden"></div>
@@ -401,7 +403,13 @@
   <div class="grab"></div>
 
   <h3>התקציב שלי</h3>
-  <div class="field" style="margin-top:12px">
+  <div class="field hidden" id="goalField" style="margin-top:12px">
+    <label for="goalInput">כמה תרצה לחסוך החודש?</label>
+    <input type="number" id="goalInput" inputmode="numeric" step="100" min="0" dir="ltr" placeholder="0">
+    <div class="hint" id="goalHint"></div>
+  </div>
+
+  <div class="field" id="budgetField" style="margin-top:12px">
     <label for="budgetInput">תקציב חודשי לכרטיסי אשראי</label>
     <input type="number" id="budgetInput" inputmode="numeric" step="100" min="0" dir="ltr" placeholder="9300">
     <div class="hint" id="budgetHint"></div>
@@ -479,6 +487,9 @@ let offered = null;         // ym the recommendation was already shown for
 // The RiseUp today-total the duplicate warning was last dismissed at, so closing it
 // silences that arrival without silencing the next one. {ym,d,at}
 let dupSeen = null;
+// ₪ to keep back each month. It comes off the daily-decisions tier alone, so the budget
+// is always the measured baseline minus this. null = spend at the measured rate.
+let savingsGoal = null;
 
 const $ = id => document.getElementById(id);
 function fmt(n){ return '₪'+Math.abs(Math.round(n)).toLocaleString('en-US'); }
@@ -495,6 +506,7 @@ function save(){ try{
   localStorage.setItem('derived',derived?JSON.stringify(derived):'');
   localStorage.setItem('offered',offered||'');
   localStorage.setItem('dupSeen',dupSeen?JSON.stringify(dupSeen):'');
+  localStorage.setItem('savingsGoal',savingsGoal!=null?String(savingsGoal):'');
 }catch(e){} }
 function load(){ try{
   const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m);
@@ -511,6 +523,12 @@ function load(){ try{
   const dv=localStorage.getItem('derived'); if(dv) derived=JSON.parse(dv);
   offered=localStorage.getItem('offered')||null;
   const ds=localStorage.getItem('dupSeen'); if(ds) dupSeen=JSON.parse(ds);
+  const sg=localStorage.getItem('savingsGoal'); if(sg) savingsGoal=parseFloat(sg)||null;
+  // A budget typed under the old field while a derived one was active used to be ignored
+  // by the daily number. It was still a real instruction — carry it over as the goal it
+  // was asking for rather than dropping it.
+  if(derived && savingsGoal==null && monthlyBudget!=null && monthlyBudget<derived.total)
+    savingsGoal=derived.total-monthlyBudget;
   // The dismissal belongs to the day it was made on, like the entries it silenced.
   if(dupSeen && !(dupSeen.ym===ym && dupSeen.d===n.getDate())) dupSeen=null;
   // Entries written before this field existed would otherwise read as base 0 and make
@@ -775,36 +793,50 @@ function calc(){
   const spentMonth=fileData.reduce((s,x)=>s+x.amt,0);
   const daysLeft=daysInMonth-dom;
 
-  // The budget is monthly, so the daily target is whatever it divides into across this
-  // month's length. Unset, it falls back to the rate the app shipped with.
-  const totalBudget = monthlyBudget!=null ? monthlyBudget : DEFAULT_DAILY*daysInMonth;
-
   // What each tier has actually cost so far this month.
   const tiers={committed:0,big:0,daily:0};
   for(const x of fileData) tiers[x.kind||'daily']+=x.amt;
   for(const e of manualToday) tiers.daily+=e.amt;
 
+  // One budget, one place it comes from. With history, the derived figures are the
+  // measurement of what this costs today and the goal is the amount to come off it —
+  // and it comes off the daily tier alone, because the other two aren't decided daily.
+  // Without history there's nothing to measure, so the monthly figure is typed in.
+  const dailyBudget = derived ? Math.max(0,derived.dailyTarget-(savingsGoal||0))
+                              : (monthlyBudget!=null?monthlyBudget:DEFAULT_DAILY*daysInMonth);
+  const reserved = derived ? derived.committed+derived.big : 0;
+  const totalBudget = dailyBudget+reserved;
+
   // With a derived budget the daily number governs the daily tier alone: commitments and
   // big one-offs are reserved off the top instead of ambushing whichever day they land on.
   // Nothing is hidden — every tier is shown, and the total still sums to the budget.
-  const target = derived ? derived.dailyTarget/daysInMonth : totalBudget/daysInMonth;
+  const target = dailyBudget/daysInMonth;
   // Today is one of the days the remaining budget has to cover. Dividing by daysLeft
   // (which counts only the days after today) while still letting today spend the result
   // overshoots the month by one day's worth, and on the last day it divided by zero and
   // reported that nothing at all could be spent.
   const daysToCover=daysLeft+1;
-  const pool = derived ? derived.dailyTarget-tiers.daily : totalBudget-spentMonth;
+  const spentDaily = derived ? tiers.daily : spentMonth;
+  const pool = dailyBudget-spentDaily;
   const dynamicCeiling=Math.min(target,Math.max(0,pool/daysToCover));
   const remaining=dynamicCeiling-spentToday;
-  const avg=dom>0?spentMonth/dom:0;
 
-  // Carry on at today's average and this is where the month lands. Negative = over
-  // budget by that much; positive = money still in hand on the last day.
-  const projected=avg*daysInMonth;
+  // Every per-day figure measures the same thing the daily target does. Averaging the
+  // whole month's spend against a target that covers only the daily tier compared two
+  // different quantities and made an ordinary month look like an overrun.
+  const avg=dom>0?spentDaily/dom:0;
+
+  // Carry on at today's rate and this is where the month lands. The lumpy tiers are
+  // projected at their reserve rather than smeared across the days, because an insurance
+  // charge on the 14th says nothing about the rate of eating out — but money already out
+  // the door beats the reserve, or a month that overspent on one big purchase would keep
+  // projecting as though it hadn't.
+  const projected=avg*daysInMonth+Math.max(reserved,tiers.committed+tiers.big);
   const projectedDiff=totalBudget-projected;
 
   return {now,m,dom,daysInMonth,remaining,spentToday,spentMonth,allToday,avg,daysLeft,
-          dynamicCeiling,projected,projectedDiff,totalBudget,target,tiers,daysToCover};
+          dynamicCeiling,projected,projectedDiff,totalBudget,target,tiers,daysToCover,
+          dailyBudget,reserved,spentDaily};
 }
 
 /* ---------------- render ---------------- */
@@ -855,8 +887,16 @@ function render(animate){
   avgEl.textContent=fmt(c.avg);
   avgEl.className='val num '+(c.avg>c.target?'neg':'pos');
   $('avgNote').textContent=(c.avg>c.target?'מעל היעד של ':'מתחת ליעד של ')+fmt(c.target);
+  $('avgLabel').textContent = derived ? 'ממוצע יומי להחלטות' : 'ממוצע ליום';
 
   $('daysLeft').textContent=c.daysLeft;
+
+  const gr=$('goalRow');
+  if(savingsGoal!=null && derived){
+    gr.classList.remove('hidden');
+    $('goalVal').textContent=fmt(savingsGoal);
+    $('goalNote').textContent='תקציב '+fmt(c.totalBudget)+' · '+fmt(c.target)+' ליום';
+  } else gr.classList.add('hidden');
 
   const rr=$('reservedRow');
   if(derived){
@@ -873,10 +913,13 @@ function render(animate){
   else{
     const over=c.projectedDiff<0;
     fc.className='banner '+(over?'warn':'good');
+    const lands=derived?'וההחלטות היומיות ייסגרו בדיוק ביעד':'ותסגור את החודש בדיוק בתקציב';
     fc.innerHTML='<span class="ic">'+(over?'!':'✓')+'</span><span>'+(over
       ? 'אם תמשיך להוציא ככה, עד סוף החודש תוציא יותר מדי — <b>'+fmt(c.projectedDiff)+' מעל התקציב</b>'
-        + '<br><span style="opacity:.85">תישאר על <b>'+fmt(c.dynamicCeiling)+' ליום</b> ותסגור את החודש בדיוק בתקציב</span>'
-      : 'אם תמשיך להוציא ככה, עד סוף החודש יישאר לך חיסכון של <b>'+fmt(c.projectedDiff)+'</b>')+'</span>';
+        + '<br><span style="opacity:.85">תישאר על <b>'+fmt(c.dynamicCeiling)+' ליום</b> '+lands+'</span>'
+      : (savingsGoal!=null
+          ? 'אם תמשיך להוציא ככה, תסיים את החודש עם <b>'+fmt(c.projectedDiff)+'</b> מעבר ליעד החיסכון של '+fmt(savingsGoal)
+          : 'אם תמשיך להוציא ככה, עד סוף החודש יישאר לך חיסכון של <b>'+fmt(c.projectedDiff)+'</b>'))+'</span>';
   }
 
   renderChart(c);
@@ -1025,9 +1068,36 @@ function budgetHint(v){
     + '<br>נספרים רק חיובי אשראי — הוצאות ישירות מהבנק לא נכנסות לתקציב הזה.';
 }
 
+// What a savings goal costs per day, and how far that is from the rate actually being
+// lived. A goal that reads fine as a monthly figure can be half of what someone spends,
+// and that only becomes obvious once it's divided by the days.
+function goalHint(v){
+  if(!derived) return;
+  const c=calc(), dim=c.daysInMonth;
+  const goal=(v!=null && isFinite(v) && v>0) ? Math.min(v,derived.dailyTarget) : 0;
+  const perDay=(derived.dailyTarget-goal)/dim;
+  const pace=c.dom>0?c.spentDaily/c.dom:0;
+  let t='הבסיס שלך — מה שאתה מוציא בפועל — הוא <b>'+fmt(derived.total)+' בחודש</b>.'
+    + '<br>' + (goal>0
+      ? 'חיסכון של '+fmt(goal)+' משאיר תקציב של <b>'+fmt(derived.total-goal)+'</b>, כלומר <b>'+fmt(perDay)+' ליום</b> להחלטות היומיות.'
+      : 'בלי יעד חיסכון התקציב שווה לבסיס: <b>'+fmt(perDay)+' ליום</b> להחלטות היומיות.');
+  if(pace>0){
+    const cut=Math.round((1-perDay/pace)*100);
+    t += '<br>אתה כרגע על <b>'+fmt(pace)+' ליום</b>' + (cut>0?' — קיצוץ של '+cut+'%':'') + '.';
+    if(cut>=40) t += '<br><span class="warn">קיצוץ בסדר גודל כזה כמעט תמיד נשבר. יעד קטן שמחזיק שווה יותר.</span>';
+  }
+  $('goalHint').innerHTML=t;
+}
+
 function openSheet(){
   $('tokenInput').value=apiCfg.token||'';
   $('baseInput').value=apiCfg.base||'';
+  // With history there is a measured baseline, so the question worth asking is how much
+  // to keep back. Without one there is nothing to subtract from, and the budget is typed.
+  $('goalField').classList.toggle('hidden',!derived);
+  $('budgetField').classList.toggle('hidden',!!derived);
+  $('goalInput').value = savingsGoal!=null ? Math.round(savingsGoal) : '';
+  goalHint(savingsGoal);
   $('budgetInput').value = monthlyBudget!=null ? Math.round(monthlyBudget) : '';
   budgetHint(monthlyBudget);
   historyLine();
@@ -1055,6 +1125,16 @@ $('rebuildBtn').addEventListener('click',async ()=>{
   await backfill(true);
   $('rebuildBtn').disabled=false;
   toast(history.error?'המשיכה נכשלה':'נטענו '+history.months.length+' חודשים');
+});
+
+$('goalInput').addEventListener('input',()=>goalHint(parseFloat($('goalInput').value)));
+
+$('goalInput').addEventListener('change',()=>{
+  const v=parseFloat($('goalInput').value);
+  savingsGoal = (isFinite(v)&&v>0) ? Math.round(Math.min(v,derived?derived.dailyTarget:v)) : null;
+  if(savingsGoal!=null) $('goalInput').value=Math.round(savingsGoal);
+  save(); render(true); goalHint(savingsGoal);
+  toast(savingsGoal!=null?'יעד החיסכון עודכן':'היעד בוטל');
 });
 
 $('budgetInput').addEventListener('input',()=>budgetHint(parseFloat($('budgetInput').value)));
