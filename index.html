@@ -182,8 +182,7 @@
   .addbar{ position:fixed; bottom:0; left:0; right:0; z-index:60;
     padding:12px 16px calc(12px + var(--safe-b));
     background:linear-gradient(to top, var(--bg) 65%, rgba(244,245,247,0)); }
-  /* One primary action at full width, one compact secondary beside it. Both are sized by
-     the flex row — a width:100% here fought the row and pushed the pair off the screen. */
+  /* One way in. The button is sized by the flex row — a width:100% here fought the row. */
   .addbar-inner{ max-width:480px; margin:0 auto; display:flex; gap:10px; align-items:stretch; }
   .addbig{ flex:1; min-width:0; display:flex; align-items:center; justify-content:center;
     gap:9px; border:none; border-radius:18px; background:var(--blue); color:#fff;
@@ -191,17 +190,14 @@
     box-shadow:0 8px 22px -8px rgba(91,108,245,.8); transition:transform .12s; }
   .addbig:active{ transform:scale(.98); }
   .addbig .plus{ font-size:22px; font-weight:500; line-height:1; }
-  .addcheck{ flex:none; width:58px; height:58px; border:none; border-radius:18px;
-    background:var(--card); color:var(--blue); display:grid; place-items:center;
-    box-shadow:0 4px 18px -10px rgba(24,28,50,.65); transition:transform .12s; }
-  .addcheck:active{ transform:scale(.94); }
-  .addcheck svg{ width:24px; height:24px; fill:currentColor; }
-
   .verdict{ border-radius:14px; padding:13px 15px; margin-top:12px; font-size:15px;
     font-weight:600; text-align:center; }
   .verdict.ok{ background:var(--green-soft); color:#1F6E48; }
   .verdict.tight{ background:#FEF6E7; color:#8A6412; }
   .verdict.over{ background:var(--orange-soft); color:#A8431B; }
+  /* Says why a second button just appeared, without arguing with the verdict above it. */
+  .pricey{ text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-3);
+    margin-top:8px; letter-spacing:.2px; }
 
   /* ---------- keypad ---------- */
   .pad{ padding-bottom:calc(18px + var(--safe-b)); }
@@ -335,14 +331,15 @@
   <div class="card">
     <div class="head-line">
       <div class="card-t">החודש</div>
-      <button class="linkbtn hidden" id="investigateBtn" style="width:auto; padding:0">לאן זה הלך ›</button>
     </div>
     <div class="row"><span class="lbl">יצא בכרטיסי אשראי</span><span class="val num" id="monthSpent">₪0</span></div>
-    <div class="row"><span class="lbl"><span id="avgLabel">ממוצע ליום</span><span class="sub" id="avgNote">היעד הוא ₪300</span></span><span class="val num" id="avgDaily">₪0</span></div>
     <div class="row"><span class="lbl">ימים שנותרו בחודש</span><span class="val num" id="daysLeft">—</span></div>
     <div class="row hidden" id="goalRow"><span class="lbl">יעד חיסכון<span class="sub" id="goalNote"></span></span><span class="val num pos" id="goalVal"></span></div>
-    <div class="row hidden" id="reservedRow"><span class="lbl">שמור מראש<span class="sub" id="reservedNote"></span></span><span class="val num" id="reservedVal"></span></div>
     <div class="banner hidden" id="forecast" style="margin:16px 0 0"></div>
+    <!-- The link sits with what it opens: right above the panel it unfolds, under the
+         forecast banner. In the card header it was a heading that revealed a list
+         halfway down the card. -->
+    <button class="linkbtn hidden" id="investigateBtn" style="text-align:right; margin-top:14px">לאן זה הלך ›</button>
     <div id="investigatePanel" class="hidden"></div>
   </div>
 
@@ -357,10 +354,7 @@
 
 <div class="addbar">
   <div class="addbar-inner">
-    <button class="addbig" id="openPad"><span class="plus">+</span><span>הוספת הוצאה</span></button>
-    <button class="addcheck" id="openCheck" aria-label="בדיקה לפני קנייה">
-      <svg viewBox="0 0 24 24"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2m0 3v3h10V5zm.5 6a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m-9 4a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5"/></svg>
-    </button>
+    <button class="addbig" id="openPad"><span class="plus">+</span><span>קנייה חדשה</span></button>
   </div>
 </div>
 
@@ -404,6 +398,7 @@
   </div>
   <div class="pad-left" id="padLeft"></div>
   <div class="verdict hidden" id="padVerdict"></div>
+  <div class="pricey hidden" id="padPricey">קנייה יקרה</div>
   <input class="pad-desc" id="padDesc" placeholder="על מה? (לא חובה)" autocomplete="off">
   <div class="padrow">
     <button class="btn btn-primary" id="padSave">הוספה</button>
@@ -428,6 +423,21 @@
     <input type="number" id="budgetInput" inputmode="numeric" step="100" min="0" dir="ltr" placeholder="9300">
     <div class="hint" id="budgetHint"></div>
   </div>
+
+  <hr style="border:none; border-top:1px solid #E4E6EC; margin:22px 0 20px">
+
+  <h3>המספרים שלך</h3>
+  <p class="lead">מאיפה מגיע המספר שכתוב במסך הראשי.</p>
+  <div id="mathRows"></div>
+  <p class="lead hidden" id="mathNote" style="margin-top:12px; font-size:14px">
+    "לבזבז" זה הוצאות יומיות בכרטיס אשראי בלבד — בלי החשבונות הקבועים ובלי קניות
+    גדולות מעל ₪1,000, שעליהם כבר שמור כסף בצד. זה גם לא הכסף שיש בחשבון הבנק,
+    אלא התקציב שהאפליקציה מחלקת.
+  </p>
+  <div class="row hidden" id="reservedRow"><span class="lbl">שמור מראש<span class="sub" id="reservedNote"></span></span><span class="val num" id="reservedVal"></span></div>
+  <div class="row"><span class="lbl">ממוצע ליום מתחילת החודש<span class="sub" id="avgNote"></span></span><span class="val num" id="avgDaily">₪0</span></div>
+
+  <hr style="border:none; border-top:1px solid #E4E6EC; margin:22px 0 20px">
 
   <div class="field" style="margin-top:14px">
     <label>תקציב אוטומטי מההיסטוריה</label>
@@ -858,10 +868,12 @@ function calc(){
   const spentMonth=fileData.reduce((s,x)=>s+x.amt,0);
   const daysLeft=daysInMonth-dom;
 
-  // What each tier has actually cost so far this month.
+  // What each tier has actually cost so far this month. RiseUp only: a provisional entry
+  // is an estimate of a charge that hasn't landed, and folding it in here would dock today
+  // twice — once through spentToday, and again through the ceiling recomputed from the
+  // pool it just shrank.
   const tiers={committed:0,big:0,daily:0};
   for(const x of fileData) tiers[x.kind||'daily']+=x.amt;
-  for(const e of manualToday) tiers.daily+=e.amt;
 
   // One budget, one place it comes from. With history, the derived figures are the
   // measurement of what this costs today and the goal is the amount to come off it —
@@ -882,8 +894,16 @@ function calc(){
   // reported that nothing at all could be spent.
   const daysToCover=daysLeft+1;
   const spentDaily = derived ? tiers.daily : spentMonth;
-  const pool = dailyBudget-spentDaily;
-  const dynamicCeiling=Math.min(target,Math.max(0,pool/daysToCover));
+
+  // Today's allowance is settled by what the month looked like when the day began, so it
+  // holds still while the day is spent. Dividing a pool that today has already been taken
+  // out of by a day count that still includes today charged today twice, and the ceiling
+  // sank under its own spending: buy lunch and the number lunch is measured against drops.
+  const spentDailyToday = fileData
+    .filter(x=>x.d===dom && (derived ? (x.kind||'daily')==='daily' : true))
+    .reduce((s,x)=>s+x.amt,0);
+  const poolPrior = dailyBudget-(spentDaily-spentDailyToday);
+  const dynamicCeiling=Math.min(target,Math.max(0,poolPrior/daysToCover));
   const remaining=dynamicCeiling-spentToday;
 
   // Every per-day figure measures the same thing the daily target does. Averaging the
@@ -901,7 +921,8 @@ function calc(){
 
   return {now,m,dom,daysInMonth,remaining,spentToday,spentMonth,allToday,avg,daysLeft,
           dynamicCeiling,projected,projectedDiff,totalBudget,target,tiers,daysToCover,
-          dailyBudget,reserved,spentDaily};
+          dailyBudget,reserved,spentDaily,spentDailyPrior:spentDaily-spentDailyToday,poolPrior,
+          manualSum:manualToday.reduce((s,e)=>s+e.amt,0)};
 }
 
 /* ---------------- render ---------------- */
@@ -948,13 +969,14 @@ function render(animate){
 
   $('monthSpent').textContent=fmt(c.spentMonth);
 
+  // Lives in settings now: it describes the month rather than driving the next decision.
   const avgEl=$('avgDaily');
   avgEl.textContent=fmt(c.avg);
   avgEl.className='val num '+(c.avg>c.target?'neg':'pos');
-  $('avgNote').textContent=(c.avg>c.target?'מעל היעד של ':'מתחת ליעד של ')+fmt(c.target);
-  $('avgLabel').textContent = derived ? 'ממוצע יומי להחלטות' : 'ממוצע ליום';
+  $('avgNote').textContent=(c.avg>c.target?'מעל היעד של ':'מתחת ליעד של ')+fmt(c.target)+' ליום';
 
   $('daysLeft').textContent=c.daysLeft;
+  renderMath(c);
 
   const gr=$('goalRow');
   if(savingsGoal!=null && derived){
@@ -1011,6 +1033,34 @@ function render(animate){
   if(!$('investigatePanel').classList.contains('hidden')) renderInvestigation();
   $('onboard').classList.toggle('hidden',configured()||fileData.length>0);
   refreshStatus();
+}
+
+// The headline number, spelled out in the order it is computed. Every line names what its
+// number *is* — a column of bare amounts left "₪660" meaning nothing, because the reader
+// still had to guess whether it was in the bank, in the budget, or left to spend.
+function renderMath(c){
+  const out=[];
+  const row=(label,val,sub,cls)=>out.push(
+    '<div class="row"><span class="lbl">'+label
+    + (sub?'<span class="sub">'+sub+'</span>':'')+'</span>'
+    + '<span class="val num '+(cls||'')+'">'+val+'</span></div>');
+
+  if(derived && savingsGoal>0) row('שמת בצד לחיסכון',fmt(savingsGoal),'','pos');
+  row(derived?'יש לך לבזבז החודש בכרטיס האשראי':'התקציב שלך לחודש',fmt(c.dailyBudget));
+  row('כבר בזבזת עד אתמול',fmt(c.spentDailyPrior));
+  row('נשאר לבזבז מהיום עד סוף החודש',(c.poolPrior<0?'-':'')+fmt(c.poolPrior),'',c.poolPrior<0?'neg':'');
+  row('ימים שנשארו בחודש (כולל היום)',c.daysToCover);
+  // The cap is the one line in the table that isn't plain arithmetic, so it says so.
+  row('אז מותר לך לבזבז היום',fmt(c.dynamicCeiling),
+      c.poolPrior/c.daysToCover>c.target ? 'לא יותר מ'+fmt(c.target)+' ליום, גם כשנשאר יותר' : '');
+  row('מזה כבר יצא היום',fmt(c.spentToday));
+  row(c.remaining<0?'חרגת היום':'נשאר לך להיום',
+      (c.remaining<0?'-':'')+fmt(c.remaining),'',c.remaining<0?'neg':'pos');
+
+  $('mathRows').innerHTML=out.join('');
+  // Without a derived budget there are no separate tiers, so the caveat about what the
+  // figure leaves out would be describing a split that doesn't exist.
+  $('mathNote').classList.toggle('hidden',!derived);
 }
 
 // Spending per day for the last week. Today comes from spentToday so it includes the
@@ -1160,13 +1210,18 @@ function goalHint(v){
   const goal=(v!=null && isFinite(v) && v>0) ? Math.min(v,derived.dailyTarget) : 0;
   const perDay=(derived.dailyTarget-goal)/dim;
   const pace=c.dom>0?c.spentDaily/c.dom:0;
-  let t='הבסיס שלך — מה שאתה מוציא בפועל — הוא <b>'+fmt(derived.total)+' בחודש</b>.'
+  // The old wording put two different pots in one sentence — a total that includes the
+  // commitments beside a per-day figure derived from the daily tier alone — and the two
+  // numbers didn't multiply out. Each line now says which pot it is talking about.
+  let t='אתה מוציא <b>'+fmt(derived.total)+' בחודש</b> בכרטיסי האשראי.'
+    + '<br>מתוכם '+fmt(derived.committed+derived.big)+' הולכים לחשבונות קבועים ולקניות גדולות — לא נוגעים בהם.'
+    + '<br>נשארות <b>'+fmt(derived.dailyTarget)+'</b> לכל השאר.'
     + '<br>' + (goal>0
-      ? 'חיסכון של '+fmt(goal)+' משאיר תקציב של <b>'+fmt(derived.total-goal)+'</b>, כלומר <b>'+fmt(perDay)+' ליום</b> להחלטות היומיות.'
-      : 'בלי יעד חיסכון התקציב שווה לבסיס: <b>'+fmt(perDay)+' ליום</b> להחלטות היומיות.');
+      ? 'אם תחסוך '+fmt(goal)+', נשארות <b>'+fmt(derived.dailyTarget-goal)+'</b> — כלומר <b>'+fmt(perDay)+' ליום</b>.'
+      : 'בלי יעד חיסכון זה <b>'+fmt(perDay)+' ליום</b>.');
   if(pace>0){
     const cut=Math.round((1-perDay/pace)*100);
-    t += '<br>אתה כרגע על <b>'+fmt(pace)+' ליום</b>' + (cut>0?' — קיצוץ של '+cut+'%':'') + '.';
+    t += '<br>היום אתה מוציא <b>'+fmt(pace)+' ליום</b>' + (cut>0?', אז זה אומר לרדת ב-'+cut+'%':'') + '.';
     if(cut>=40) t += '<br><span class="warn">קיצוץ בסדר גודל כזה כמעט תמיד נשבר. יעד קטן שמחזיק שווה יותר.</span>';
   }
   $('goalHint').innerHTML=t;
@@ -1272,8 +1327,10 @@ function indexUnderBand(){
   return item?+item.dataset.i:null;
 }
 
-let padMode='add';   // 'add' = record a spend, 'check' = simulate a purchase
-
+// One way in, and it always asks the same question: what is this about to cost? Recording
+// a spend and checking one before it happens were two doors onto the same wheel, and the
+// only real difference — whether the answer counts as a decision — is the amount, not the
+// door. So the amount decides.
 function paintWheel(){
   wheelItems.forEach((el,i)=>{
     const d=Math.abs(i-wheelIndex);
@@ -1282,7 +1339,13 @@ function paintWheel(){
   const v=wheelValue(), c=calc(), box=$('padLeft'), verdict=$('padVerdict');
   $('padSave').disabled = v<=0;
 
-  if(padMode==='add'){
+  // Two buttons only once the amount is a decision. Below the threshold a purchase is a
+  // reflex, and it's weighed against the day it lands on rather than against the month.
+  const twoWay = v>=CHECK_MIN;
+  $('padSkip').classList.toggle('hidden',!twoWay);
+  $('padPricey').classList.toggle('hidden',!twoWay);
+
+  if(!twoWay){
     verdict.classList.add('hidden');
     const left=Math.round(c.remaining-v);
     box.classList.toggle('over',left<0);
@@ -1295,17 +1358,9 @@ function paintWheel(){
   const {dailyPool,bigLeft,fromDaily,after,perDay,verdict:vd} = checkMaths(v,c);
 
   box.classList.toggle('over',after<0);
-  box.innerHTML = v<=0
-    ? `נשאר לחודש <b>${fmt(dailyPool)}</b> להוצאות היומיות`
-    : (bigLeft>0 && v>=BIG_MIN
-        ? `<b>${fmt(Math.min(v,bigLeft))}</b> מהקופה לקניות גדולות · <b>${fmt(fromDaily)}</b> מהכסף היומי`
-        : `נשאר לחודש <b>${fmt(dailyPool)}</b> · אחרי הקנייה <b>${after<0?'-':''}${fmt(Math.abs(after))}</b>`);
-
-  // Two buttons only once the amount is a decision. Under the threshold the single
-  // record button stays, because there is nothing there worth recording as a choice.
-  const twoWay = v>=CHECK_MIN;
-  $('padSkip').classList.toggle('hidden',!twoWay);
-  $('padSave').textContent = twoWay ? 'קניתי' : 'רשום את זה';
+  box.innerHTML = bigLeft>0 && v>=BIG_MIN
+    ? `<b>${fmt(Math.min(v,bigLeft))}</b> מהקופה לקניות גדולות · <b>${fmt(fromDaily)}</b> מהכסף היומי`
+    : `נשאר לחודש <b>${fmt(dailyPool)}</b> · אחרי הקנייה <b>${after<0?'-':''}${fmt(Math.abs(after))}</b>`;
 
   if(v<=0){ verdict.classList.add('hidden'); return; }
   verdict.classList.remove('hidden');
@@ -1326,7 +1381,10 @@ function paintWheel(){
 // what the reserve can't absorb eats into the daily money — which is the part that
 // actually changes how the rest of the month feels.
 function checkMaths(v,c){
-  const dailyPool = derived ? derived.dailyTarget-c.tiers.daily : c.totalBudget-c.spentMonth;
+  // The same pot the rest of the app spends from. Reading the derived target directly
+  // skipped the savings goal, so this screen offered a month's worth of money the
+  // headline had already set aside — two answers to one question.
+  const dailyPool = c.dailyBudget-c.spentDaily-c.manualSum;
   const bigLeft   = derived ? Math.max(0,derived.big-c.tiers.big) : 0;
   const fromDaily = v>=BIG_MIN ? Math.max(0,v-bigLeft) : v;
   const after     = dailyPool-fromDaily;
@@ -1359,12 +1417,11 @@ $('wheelScroll').addEventListener('click',e=>{
   el.scrollIntoView({block:'center',behavior:'smooth'});
 });
 
-function openPad(mode){
-  padMode = mode==='check' ? 'check' : 'add';
-  $('padTitle').textContent = padMode==='check' ? 'כמה עומדת לעלות הקנייה?' : 'כמה הוצאת עכשיו?';
-  $('padSave').textContent  = padMode==='check' ? 'רשום את זה' : 'הוספה';
+function openPad(){
+  $('padTitle').textContent='כמה עומדת לעלות הקנייה?';
+  $('padSave').textContent='קניתי';
   $('padSkip').classList.add('hidden');
-  $('padDesc').classList.toggle('hidden', padMode==='check');
+  $('padPricey').classList.add('hidden');
   $('padDesc').value='';
   wheelIndex=0;
   $('wheelScroll').scrollTop=0;
@@ -1376,15 +1433,14 @@ function openPad(mode){
 function closePad(answered){
   // Closed without choosing: the check is still real, and the next sync may find the
   // charge that answers it.
-  if(!answered && padMode==='check'){
+  if(!answered){
     const v=wheelValue();
     if(v>=CHECK_MIN){ recordCheck(v,null); save(); render(false); }
   }
   $('padScrim').classList.remove('open'); $('padSheet').classList.remove('open');
 }
 
-$('openPad').addEventListener('click',()=>openPad('add'));
-$('openCheck').addEventListener('click',()=>openPad('check'));
+$('openPad').addEventListener('click',()=>openPad());
 // Wrapped, not passed directly: the click event would arrive as the `answered` argument
 // and every dismissal would look like a decision.
 $('padScrim').addEventListener('click',()=>closePad());
@@ -1394,9 +1450,9 @@ $('padSave').addEventListener('click',()=>{
   const v=wheelValue();
   if(v<=0) return;
   const n=new Date();
-  if(padMode==='check' && v>=CHECK_MIN) recordCheck(v,'bought');
+  if(v>=CHECK_MIN) recordCheck(v,'bought');
   manualData.push({id:Date.now(),amt:v,desc:$('padDesc').value.trim(),ym:ymNow(),d:n.getDate(),base:riseupToday()});
-  closePad(true); save(); render(true); toast('נוסף '+fmt(v));
+  closePad(true); save(); render(true); toast('נרשם '+fmt(v));
 });
 
 // Walking away costs nothing and earns nothing. It is not added to the budget and it does
