@@ -172,6 +172,10 @@
   .btn:active{ transform:scale(.985); }
   .btn-primary{ background:var(--blue); color:#fff; }
   .btn-ghost{ background:var(--bg); color:var(--ink); }
+  /* The two closing buttons sit side by side, same height, only above the threshold. */
+  .padrow{ display:flex; gap:10px; align-items:stretch; }
+  .padrow .btn{ flex:1; min-width:0; white-space:nowrap; }
+  .btn-skip{ background:var(--card); color:#1F6E48; box-shadow:inset 0 0 0 1.5px #1F6E48; }
   .btn-danger{ background:var(--orange-soft); color:#C0491D; }
 
   /* ---------- add bar ---------- */
@@ -342,6 +346,13 @@
     <div id="investigatePanel" class="hidden"></div>
   </div>
 
+  <div class="card hidden" id="decisionsCard">
+    <div class="head-line"><div class="card-t">ההחלטות שלך החודש</div></div>
+    <div class="row hidden" id="skipRow"><span class="lbl">ויתרת<span class="sub" id="skipNote"></span></span><span class="val num pos" id="skipVal"></span></div>
+    <div class="row hidden" id="boughtRow"><span class="lbl">יצא לפועל<span class="sub" id="boughtNote"></span></span><span class="val num" id="boughtVal"></span></div>
+    <div class="blank hidden" id="ignoredNote" style="padding:12px 0 2px"><div class="n" id="ignoredText"></div></div>
+  </div>
+
 </div>
 
 <div class="addbar">
@@ -394,7 +405,10 @@
   <div class="pad-left" id="padLeft"></div>
   <div class="verdict hidden" id="padVerdict"></div>
   <input class="pad-desc" id="padDesc" placeholder="על מה? (לא חובה)" autocomplete="off">
-  <button class="btn btn-primary" id="padSave">הוספה</button>
+  <div class="padrow">
+    <button class="btn btn-primary" id="padSave">הוספה</button>
+    <button class="btn btn-skip hidden" id="padSkip">מוותר וחוסך</button>
+  </div>
   <button class="btn btn-ghost" id="padCancel" style="margin-top:9px">ביטול</button>
 </div>
 
@@ -491,6 +505,10 @@ let dupSeen = null;
 // is always the measured baseline minus this. null = spend at the measured rate.
 let savingsGoal = null;
 
+// One record per pre-purchase check above CHECK_MIN. This is the only place the app learns
+// what someone was about to do with their money before they did it.
+let checks = [];
+
 const $ = id => document.getElementById(id);
 function fmt(n){ return '₪'+Math.abs(Math.round(n)).toLocaleString('en-US'); }
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -507,6 +525,7 @@ function save(){ try{
   localStorage.setItem('offered',offered||'');
   localStorage.setItem('dupSeen',dupSeen?JSON.stringify(dupSeen):'');
   localStorage.setItem('savingsGoal',savingsGoal!=null?String(savingsGoal):'');
+  localStorage.setItem('checks',JSON.stringify(checks));
 }catch(e){} }
 function load(){ try{
   const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m);
@@ -524,6 +543,9 @@ function load(){ try{
   offered=localStorage.getItem('offered')||null;
   const ds=localStorage.getItem('dupSeen'); if(ds) dupSeen=JSON.parse(ds);
   const sg=localStorage.getItem('savingsGoal'); if(sg) savingsGoal=parseFloat(sg)||null;
+  const ck=localStorage.getItem('checks'); if(ck) checks=JSON.parse(ck);
+  // The tally is monthly, like everything else on that card.
+  checks=checks.filter(c=>c.ym===ym);
   // A budget typed under the old field while a derived one was active used to be ignored
   // by the daily number. It was still a real instruction — carry it over as the goal it
   // was asking for rather than dropping it.
@@ -718,6 +740,7 @@ async function syncFromApi(silent){
 
     const data=await res.json();
     fileData=mapApiTransactions(data && data.transactions);
+    reconcileChecks();
     lastSync=Date.now();
     save(); render(true);
     if(!silent) toast('הנתונים עודכנו');
@@ -745,6 +768,48 @@ function refreshStatus(){
   const hhmm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
   const sameDay=d.toDateString()===new Date().toDateString();
   setStatus('ok', sameDay?'עודכן '+hhmm : 'עודכן '+d.getDate()+'/'+(d.getMonth()+1));
+}
+
+/* ---------------- checks ---------------- */
+// Below this a check isn't a decision, it's a reflex — and two buttons would only be noise.
+const CHECK_MIN = 200;
+// Matching needs headroom: below this there are too many similar charges in a month for a
+// match to mean anything.
+const MATCH_MIN = 300;
+const MATCH_TOL = 0.08;   // the wheel rounds, and people round after it
+const MATCH_DAYS = 3;     // a decision and its charge land within 72 hours
+
+// Closes the loop for anyone who didn't tap. A check left open is compared against the
+// charges RiseUp delivers, and a close-enough amount within the window turns it into a
+// purchase — with the merchant name attached. An explicit choice always wins: a check the
+// user marked as skipped is never reopened by a similar charge.
+function reconcileChecks(){
+  const open=checks.filter(c=>!c.outcome && c.amt>=MATCH_MIN);
+  if(open.length===0) return false;
+  const taken=new Set(checks.filter(c=>c.txKey).map(c=>c.txKey));
+  let changed=false;
+  for(const c of open){
+    for(let i=0;i<fileData.length;i++){
+      const t=fileData[i], key=i+':'+t.d+':'+Math.round(t.amt);
+      if(taken.has(key) || t.d<c.d || t.d>c.d+MATCH_DAYS) continue;
+      if(Math.abs(t.amt-c.amt) > c.amt*MATCH_TOL) continue;
+      c.outcome='matched'; c.merchant=t.name||''; c.txKey=key;
+      taken.add(key); changed=true; break;
+    }
+  }
+  return changed;
+}
+
+function checkTally(){
+  const skipped=checks.filter(c=>c.outcome==='skipped');
+  const done=checks.filter(c=>c.outcome==='bought'||c.outcome==='matched');
+  const warned=checks.filter(c=>c.verdict==='over');
+  return {
+    skipped, done, warned,
+    skipSum:skipped.reduce((s,c)=>s+c.amt,0),
+    doneSum:done.reduce((s,c)=>s+c.amt,0),
+    ignored:warned.filter(c=>c.outcome==='bought'||c.outcome==='matched').length,
+  };
 }
 
 /* ---------------- calc ---------------- */
@@ -897,6 +962,24 @@ function render(animate){
     $('goalVal').textContent=fmt(savingsGoal);
     $('goalNote').textContent='תקציב '+fmt(c.totalBudget)+' · '+fmt(c.target)+' ליום';
   } else gr.classList.add('hidden');
+
+  const t=checkTally(), dc=$('decisionsCard');
+  dc.classList.toggle('hidden',checks.length===0);
+  const sr=$('skipRow'), br=$('boughtRow'), ig=$('ignoredNote');
+  sr.classList.toggle('hidden',t.skipped.length===0);
+  if(t.skipped.length){
+    $('skipVal').textContent=fmt(t.skipSum);
+    $('skipNote').textContent='על '+t.skipped.length+(t.skipped.length===1?' קנייה':' קניות');
+  }
+  br.classList.toggle('hidden',t.done.length===0);
+  if(t.done.length){
+    $('boughtVal').textContent=fmt(t.doneSum);
+    $('boughtNote').textContent=t.done.length+(t.done.length===1?' קנייה':' קניות');
+  }
+  // Stated plainly and once. The point is the number, not a lecture about it.
+  ig.classList.toggle('hidden',t.ignored===0);
+  if(t.ignored) $('ignoredText').textContent=t.ignored+' מתוך '+t.warned.length
+    +' מהאזהרות על חריגה נגמרו בקנייה בכל זאת.';
 
   const rr=$('reservedRow');
   if(derived){
@@ -1209,15 +1292,7 @@ function paintWheel(){
     return;
   }
 
-  // Check mode judges a purchase against the month, not the day. With a derived budget a
-  // purchase big enough to qualify comes out of the big-purchase reserve first, and only
-  // what the reserve can't absorb eats into the daily money — which is the part that
-  // actually changes how the rest of the month feels.
-  const dailyPool = derived ? derived.dailyTarget-c.tiers.daily : c.totalBudget-c.spentMonth;
-  const bigLeft   = derived ? Math.max(0,derived.big-c.tiers.big) : 0;
-  const fromDaily = v>=BIG_MIN ? Math.max(0,v-bigLeft) : v;
-  const after     = dailyPool-fromDaily;
-  const perDay    = after/c.daysToCover;
+  const {dailyPool,bigLeft,fromDaily,after,perDay,verdict:vd} = checkMaths(v,c);
 
   box.classList.toggle('over',after<0);
   box.innerHTML = v<=0
@@ -1226,18 +1301,46 @@ function paintWheel(){
         ? `<b>${fmt(Math.min(v,bigLeft))}</b> מהקופה לקניות גדולות · <b>${fmt(fromDaily)}</b> מהכסף היומי`
         : `נשאר לחודש <b>${fmt(dailyPool)}</b> · אחרי הקנייה <b>${after<0?'-':''}${fmt(Math.abs(after))}</b>`);
 
+  // Two buttons only once the amount is a decision. Under the threshold the single
+  // record button stays, because there is nothing there worth recording as a choice.
+  const twoWay = v>=CHECK_MIN;
+  $('padSkip').classList.toggle('hidden',!twoWay);
+  $('padSave').textContent = twoWay ? 'קניתי' : 'רשום את זה';
+
   if(v<=0){ verdict.classList.add('hidden'); return; }
   verdict.classList.remove('hidden');
-  if(after<0){
+  if(vd==='over'){
     verdict.className='verdict over';
     verdict.textContent='חורג — זה ' + fmt(after) + ' מעבר למה שנשאר לחודש';
-  } else if(perDay < c.target*0.8){
+  } else if(vd==='tight'){
     verdict.className='verdict tight';
     verdict.textContent='דחוק — יישארו לך ' + fmt(perDay) + ' ליום ל-' + c.daysToCover + ' הימים שנותרו';
   } else {
     verdict.className='verdict ok';
     verdict.textContent='בסדר — יישארו לך ' + fmt(perDay) + ' ליום';
   }
+}
+
+// Check mode judges a purchase against the month, not the day. With a derived budget a
+// purchase big enough to qualify comes out of the big-purchase reserve first, and only
+// what the reserve can't absorb eats into the daily money — which is the part that
+// actually changes how the rest of the month feels.
+function checkMaths(v,c){
+  const dailyPool = derived ? derived.dailyTarget-c.tiers.daily : c.totalBudget-c.spentMonth;
+  const bigLeft   = derived ? Math.max(0,derived.big-c.tiers.big) : 0;
+  const fromDaily = v>=BIG_MIN ? Math.max(0,v-bigLeft) : v;
+  const after     = dailyPool-fromDaily;
+  const perDay    = after/c.daysToCover;
+  const verdict   = after<0 ? 'over' : (perDay < c.target*0.8 ? 'tight' : 'ok');
+  return {dailyPool,bigLeft,fromDaily,after,perDay,verdict};
+}
+
+// Every check above the threshold is remembered, whichever button ends it — and also when
+// no button does, so the sync can close it later.
+function recordCheck(v,outcome){
+  const n=new Date();
+  checks.push({id:Date.now(), amt:v, ts:Date.now(), ym:ymNow(), d:n.getDate(),
+               verdict:checkMaths(v,calc()).verdict, outcome:outcome||null, merchant:''});
 }
 
 let wheelTick=null;
@@ -1260,6 +1363,7 @@ function openPad(mode){
   padMode = mode==='check' ? 'check' : 'add';
   $('padTitle').textContent = padMode==='check' ? 'כמה עומדת לעלות הקנייה?' : 'כמה הוצאת עכשיו?';
   $('padSave').textContent  = padMode==='check' ? 'רשום את זה' : 'הוספה';
+  $('padSkip').classList.add('hidden');
   $('padDesc').classList.toggle('hidden', padMode==='check');
   $('padDesc').value='';
   wheelIndex=0;
@@ -1269,19 +1373,40 @@ function openPad(mode){
   // The sheet animates in, so the band isn't where it will end up until it settles.
   setTimeout(syncWheel,320);
 }
-function closePad(){ $('padScrim').classList.remove('open'); $('padSheet').classList.remove('open'); }
+function closePad(answered){
+  // Closed without choosing: the check is still real, and the next sync may find the
+  // charge that answers it.
+  if(!answered && padMode==='check'){
+    const v=wheelValue();
+    if(v>=CHECK_MIN){ recordCheck(v,null); save(); render(false); }
+  }
+  $('padScrim').classList.remove('open'); $('padSheet').classList.remove('open');
+}
 
 $('openPad').addEventListener('click',()=>openPad('add'));
 $('openCheck').addEventListener('click',()=>openPad('check'));
-$('padScrim').addEventListener('click',closePad);
-$('padCancel').addEventListener('click',closePad);
+// Wrapped, not passed directly: the click event would arrive as the `answered` argument
+// and every dismissal would look like a decision.
+$('padScrim').addEventListener('click',()=>closePad());
+$('padCancel').addEventListener('click',()=>closePad());
 
 $('padSave').addEventListener('click',()=>{
   const v=wheelValue();
   if(v<=0) return;
   const n=new Date();
+  if(padMode==='check' && v>=CHECK_MIN) recordCheck(v,'bought');
   manualData.push({id:Date.now(),amt:v,desc:$('padDesc').value.trim(),ym:ymNow(),d:n.getDate(),base:riseupToday()});
-  closePad(); save(); render(true); toast('נוסף '+fmt(v));
+  closePad(true); save(); render(true); toast('נוסף '+fmt(v));
+});
+
+// Walking away costs nothing and earns nothing. It is not added to the budget and it does
+// not lift the ceiling: money you didn't spend was never allocated, and a button that pays
+// out in imaginary shekels turns into a game within a week. It counts as a decision.
+$('padSkip').addEventListener('click',()=>{
+  const v=wheelValue();
+  if(v<CHECK_MIN) return;
+  recordCheck(v,'skipped');
+  closePad(true); save(); render(false); toast('נרשם. ויתרת על '+fmt(v));
 });
 
 $('dupClear').addEventListener('click',()=>{
@@ -1332,7 +1457,7 @@ $('investigateBtn').addEventListener('click',()=>{
 
 $('clearBtn').addEventListener('click',()=>{
   if(!confirm('למחוק את כל הנתונים? אי אפשר לשחזר.')) return;
-  manualData=[]; fileData=[]; lastSync=null; dupSeen=null; save();
+  manualData=[]; fileData=[]; lastSync=null; dupSeen=null; checks=[]; save();
   $('investigatePanel').classList.add('hidden');
   closeSheet(); render(); toast('הכל אופס');
 });
