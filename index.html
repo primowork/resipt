@@ -510,6 +510,7 @@
   </details>
 
   <button class="btn btn-ghost" id="sheetCloseBtn" style="margin-top:20px">סגירה</button>
+  <p class="lead hidden" id="versionLine" style="margin-top:14px; text-align:center; font-size:13px"></p>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1341,7 +1342,29 @@ function goalHint(v){
   $('goalHint').innerHTML=t;
 }
 
+// Which build is on screen, asked once per load. A deploy that silently didn't happen
+// looks exactly like a deploy that did until something on the page happens to differ, and
+// by then the guessing has already started.
+let versionShown=false;
+async function showVersion(){
+  if(versionShown) return;
+  versionShown=true;
+  const el=$('versionLine');
+  try{
+    const r=await fetch('/api/version',{headers:{Accept:'application/json'}});
+    if(!r.ok) return;
+    const v=await r.json();
+    if(!v.sha) return;                      // running locally, or not from a git deploy
+    const t=new Date(v.startedAt);
+    const when=t.getDate()+'.'+(t.getMonth()+1)+' בשעה '
+      + String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+    el.textContent='גרסה '+v.sha+(v.branch?' ('+v.branch+')':'')+' · עלתה ב-'+when;
+    el.classList.remove('hidden');
+  }catch(e){ /* static hosting, no server to ask */ }
+}
+
 function openSheet(){
+  showVersion();
   $('tokenInput').value=apiCfg.token||'';
   $('baseInput').value=apiCfg.base||'';
   // With history there is a measured baseline, so the question worth asking is how much
