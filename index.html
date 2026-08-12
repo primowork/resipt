@@ -608,6 +608,11 @@ function ymNow(){ const n=new Date(); return n.getFullYear()+'-'+String(n.getMon
 //   big       - a one-off large purchase. A decision, but not a daily one.
 //   daily     - everything else: the spending the daily number is actually about.
 const BIG_MIN = 1000;
+// BIG_MIN is a decision, not a fact: a single ₪800 purchase lands in the daily tier and
+// reads exactly like a week of coffee. So the breakdown counts the daily tier's own
+// one-offs separately — "already spent" otherwise hides the difference between a month
+// lived expensively and three purchases that happened to fall under the line.
+const ONEOFF_MIN = 300;
 function tierOf(t,amt){
   if(t.commitmentId!=null || t.actualType==='fixed' || t.isInstallment) return 'committed';
   return amt>=BIG_MIN ? 'big' : 'daily';
@@ -1047,7 +1052,12 @@ function renderMath(c){
 
   if(derived && savingsGoal>0) row('שמת בצד לחיסכון',fmt(savingsGoal),'','pos');
   row(derived?'יש לך לבזבז החודש בכרטיס האשראי':'התקציב שלך לחודש',fmt(c.dailyBudget));
-  row('כבר בזבזת עד אתמול',fmt(c.spentDailyPrior));
+  const oneOffs=fileData.filter(x=>x.d!==c.dom && (derived?(x.kind||'daily')==='daily':true)
+                                   && x.amt>=ONEOFF_MIN);
+  const oneOffSum=oneOffs.reduce((s,x)=>s+x.amt,0);
+  row('כבר בזבזת עד אתמול',fmt(c.spentDailyPrior),
+      oneOffs.length ? 'מזה '+fmt(oneOffSum)+' ב-'+oneOffs.length
+        +(oneOffs.length===1?' קנייה בודדת':' קניות בודדות')+' מעל '+fmt(ONEOFF_MIN) : '');
   row('נשאר לבזבז מהיום עד סוף החודש',(c.poolPrior<0?'-':'')+fmt(c.poolPrior),'',c.poolPrior<0?'neg':'');
   row('ימים שנשארו בחודש (כולל היום)',c.daysToCover);
   // The cap is the one line in the table that isn't plain arithmetic, so it says so.
