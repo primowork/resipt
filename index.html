@@ -576,6 +576,9 @@ let dupSeen = null;
 let savingsGoal = null;
 // {merchant: 'committed'|'big'|'daily'} — a manual answer that beats the automatic tier.
 let overrides = {};
+// The last sync failure, held until a sync succeeds. Declared with the rest of the state
+// because syncFromApi is defined above the status block and writes to it.
+let syncError = null;
 
 // One record per pre-purchase check above CHECK_MIN. This is the only place the app learns
 // what someone was about to do with their money before they did it.
@@ -787,8 +790,12 @@ async function backfill(force){
       history.error=e.message||'שגיאה'; break;
     }
   }
+  // Only a run that finished counts as done for the month. Stamping the month on a failed
+  // run made a single dropped connection permanent: every later sync returned at the first
+  // line, and the history stayed empty until someone found the button in settings.
   // Freshly measured with whatever overrides are in force, so the warning has been answered.
-  history.builtFor=ymNow(); history.stale=false; save();
+  if(!history.error){ history.builtFor=ymNow(); history.stale=false; }
+  save();
   historyLine();
   if(months.length>=MIN_MONTHS) maybeOfferBudget();
 }
@@ -855,7 +862,7 @@ async function syncFromApi(silent){
     const data=await res.json();
     fileData=mapApiTransactions(data && data.transactions);
     reconcileChecks();
-    lastSync=Date.now();
+    lastSync=Date.now(); syncError=null;
     save(); render(true);
     if(!silent) toast('הנתונים עודכנו');
     backfill();   // background, once a month, and safe to call on every sync
@@ -866,7 +873,10 @@ async function syncFromApi(silent){
     // On a first visit the boot sync fires before any token exists. That's the
     // expected state, not a failure — the onboarding card already says what to do.
     if(err.noToken && !configured() && !lastSync){ setStatus('','לא מחובר'); return; }
-    setStatus('err',msg);
+    // Held, not just painted: refreshStatus runs on every render, so a failure announced
+    // only through setStatus was erased by the next unrelated redraw and the chip went
+    // back to claiming the data was current.
+    syncError=msg; setStatus('err',msg);
     $('sheetStatus').textContent=msg+'. '+(msg.includes('טוקן')?'צור טוקן חדש והדבק אותו כאן.':'אפשר לנסות שוב בעוד רגע.');
     if(!silent) toast('העדכון נכשל');
   }
@@ -876,6 +886,7 @@ async function syncFromApi(silent){
 function configured(){ return !!apiCfg.token || !!apiCfg.base; }
 function setStatus(state,text){ $('statusChip').className='chip'+(state?' '+state:''); $('statusText').textContent=text; }
 function refreshStatus(){
+  if(syncError) return setStatus('err',syncError);
   if(!configured() && !lastSync) return setStatus('','לא מחובר');
   if(!lastSync) return setStatus('','טרם עודכן');
   const d=new Date(lastSync);
@@ -904,7 +915,10 @@ function reconcileChecks(){
   let changed=false;
   for(const c of open){
     for(let i=0;i<fileData.length;i++){
-      const t=fileData[i], key=i+':'+t.d+':'+Math.round(t.amt);
+      // Keyed by what the charge is, not by where it sat in the array. Every sync rebuilds
+      // fileData from scratch, so a stored index pointed at a different charge next time —
+      // and the claim that "this charge is already spoken for" moved with it.
+      const t=fileData[i], key=t.d+':'+Math.round(t.amt)+':'+(t.name||'');
       if(taken.has(key) || t.d<c.d || t.d>c.d+MATCH_DAYS) continue;
       if(Math.abs(t.amt-c.amt) > c.amt*MATCH_TOL) continue;
       c.outcome='matched'; c.merchant=t.name||''; c.txKey=key;
@@ -927,15 +941,18 @@ function checkTally(){
 }
 
 /* ---------------- calc ---------------- */
-// What RiseUp has reported for today so far. Stamped onto every manual entry when it is
-// made, so the app can tell later whether new money for today has landed since.
 // Whether a charge is measured against the daily number at all. Without a derived budget
 // there are no separate pots, so everything is.
 function inDaily(kind){ return !derived || (kind||'daily')==='daily'; }
 
+// What RiseUp has reported for today's daily money so far. Stamped onto every manual entry
+// when it is made, so the app can tell later whether new money for today has landed since.
+// Daily tier only, because that is the only money a provisional entry can be standing in
+// for: an insurance charge arriving today was announcing that a ₪50 coffee entry might now
+// be counted twice, which it never could.
 function riseupToday(){
   const dom=new Date().getDate();
-  return fileData.reduce((s,x)=>x.d===dom?s+x.amt:s,0);
+  return fileData.reduce((s,x)=>(x.d===dom && inDaily(x.kind))?s+x.amt:s,0);
 }
 
 // A manual entry is a stand-in for a charge RiseUp hasn't delivered yet. Once RiseUp
@@ -1029,7 +1046,13 @@ function calc(){
   // charge on the 14th says nothing about the rate of eating out — but money already out
   // the door beats the reserve, or a month that overspent on one big purchase would keep
   // projecting as though it hadn't.
-  const projected=avg*daysInMonth+Math.max(reserved,tiers.committed+tiers.big);
+  // Only when the tiers are actually separate. Without a derived budget there is one pot,
+  // avg already carries the whole month's spending, and adding the lumpy tiers on top
+  // counted them a second time — a ₪3,000 flight projected as ₪6,000 and the banner
+  // reported four times the real overrun.
+  const projected = derived
+    ? avg*daysInMonth+Math.max(reserved,tiers.committed+tiers.big)
+    : avg*daysInMonth;
   const projectedDiff=totalBudget-projected;
 
   return {now,m,dom,daysInMonth,remaining,spentToday,otherToday,spentMonth,allToday,avg,daysLeft,
@@ -1260,7 +1283,7 @@ function renderDayDetail(c){
   $('dayRows').innerHTML = items.length
     ? items.map(x=>'<div class="row'+(x.manual?'':' tap')+'"'
         + (x.manual?'':' data-merchant="'+esc(x.name||'')+'"')+'><span class="lbl"><b>'+esc(x.name||'הוצאה')+'</b>'
-        + (x.manual?'<span class="sub">רישום זמני</span>':'<span class="sub">'+filedAs(x.name)+'</span>')+'</span>'
+        + (x.manual?'<span class="sub">רישום זמני</span>':'<span class="sub">'+filedAs(x.name,x.kind)+'</span>')+'</span>'
         + '<span class="val neg num">-'+fmt(x.amt)+'</span></div>').join('')
     : '<div class="blank"><div class="t">לא יצא כסף ביום הזה</div></div>';
 }
@@ -1278,7 +1301,7 @@ function closeDay(){
 
 function renderInvestigation(){
   const panel=$('investigatePanel');
-  const all=fileData.map(x=>({name:x.name||'ללא שם',amt:x.amt,day:x.d}));
+  const all=fileData.map(x=>({name:x.name||'ללא שם',amt:x.amt,day:x.d,kind:x.kind||'daily'}));
   if(all.length===0){ panel.innerHTML=''; panel.classList.add('hidden'); return; }
 
   const top=[...all].sort((a,b)=>b.amt-a.amt).slice(0,6);
@@ -1295,7 +1318,7 @@ function renderInvestigation(){
   // day: the day of the purchase, or 0 for a charge carried into this cashflow month
   // from an earlier purchase.
   const when = d => d>0 ? d+' ב'+MONTHS[new Date().getMonth()] : 'חיוב מקנייה קודמת';
-  html+=top.map(x=>`<div class="row tap" data-merchant="${esc(x.name)}"><span class="lbl"><b>${esc(x.name)}</b><span class="sub">${when(x.day)} · ${filedAs(x.name)}</span></span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
+  html+=top.map(x=>`<div class="row tap" data-merchant="${esc(x.name)}"><span class="lbl"><b>${esc(x.name)}</b><span class="sub">${when(x.day)} · ${filedAs(x.name,x.kind)}</span></span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
   if(grouped.length){
     html+='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">חוזר על עצמו</div></div>';
     html+=grouped.map(g=>`<div class="row tap" data-merchant="${esc(g.name)}"><span class="lbl"><b>${esc(g.name)}</b><span class="sub">${g.count} פעמים החודש · ${filedAs(g.name)}</span></span><span class="val neg num">-${fmt(g.total)}</span></div>`).join('');
@@ -1311,9 +1334,13 @@ const TIER_WORD={committed:'קבועה',big:'קנייה גדולה',daily:'יו�
 // Which pot a charge sits in belongs on the row, wherever the row is shown: it is the
 // thing the tap changes, and without it there is no reason to suspect that the ₪370 is
 // being counted as daily money.
-function filedAs(name){
-  const k=(name||'').trim(), x=fileData.find(y=>(y.name||'').trim()===k);
-  return TIER_WORD[x?(x.kind||'daily'):'daily']+(tierOverride(k)?' · שינית':'');
+// kind is passed when the caller is holding one specific charge. Looking it up by name
+// returns whichever charge happens to be first, and one merchant can hold two tiers at
+// once — ₪1,500 at a furniture shop is a big purchase, ₪60 at the same shop is not.
+function filedAs(name,kind){
+  const k=(name||'').trim();
+  const x=kind?null:fileData.find(y=>(y.name||'').trim()===k);
+  return TIER_WORD[kind || (x?(x.kind||'daily'):'daily')]+(tierOverride(k)?' · שינית':'');
 }
 
 function openTier(name){
