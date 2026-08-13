@@ -349,7 +349,7 @@
     <!-- The link sits with what it opens: right above the panel it unfolds, under the
          forecast banner. In the card header it was a heading that revealed a list
          halfway down the card. -->
-    <button class="linkbtn hidden" id="investigateBtn" style="text-align:right; margin-top:14px">לאן זה הלך ›</button>
+    <button class="linkbtn hidden" id="investigateBtn" style="text-align:right; margin-top:14px">על מה יצא הכסף ›</button>
     <div id="investigatePanel" class="hidden"></div>
   </div>
 
@@ -1191,9 +1191,12 @@ function renderDayDetail(c){
   $('dayTitle').textContent='יום '+DAYS[dt.getDay()]+', '+chartDay+' ב'+MONTHS[c.m];
   $('daySub').textContent=items.length?'יצא באותו יום':'';
   $('dayTotal').textContent=total>0?'-'+fmt(total):'';
+  // Re-filing belongs wherever a charge is looked at, and this drawer is where a day gets
+  // examined: it is the moment someone notices the ₪370 that shouldn't be daily money.
   $('dayRows').innerHTML = items.length
-    ? items.map(x=>'<div class="row"><span class="lbl"><b>'+esc(x.name||'הוצאה')+'</b>'
-        + (x.manual?'<span class="sub">רישום זמני</span>':'')+'</span>'
+    ? items.map(x=>'<div class="row'+(x.manual?'':' tap')+'"'
+        + (x.manual?'':' data-merchant="'+esc(x.name||'')+'"')+'><span class="lbl"><b>'+esc(x.name||'הוצאה')+'</b>'
+        + (x.manual?'<span class="sub">רישום זמני</span>':'<span class="sub">'+filedAs(x.name)+'</span>')+'</span>'
         + '<span class="val neg num">-'+fmt(x.amt)+'</span></div>').join('')
     : '<div class="blank"><div class="t">לא יצא כסף ביום הזה</div></div>';
 }
@@ -1228,18 +1231,10 @@ function renderInvestigation(){
   // day: the day of the purchase, or 0 for a charge carried into this cashflow month
   // from an earlier purchase.
   const when = d => d>0 ? d+' ב'+MONTHS[new Date().getMonth()] : 'חיוב מקנייה קודמת';
-  const tierWord={committed:'קבועה',big:'קנייה גדולה',daily:'יומית'};
-  // Where the charge is filed belongs on the row: it is the thing the tap changes, and
-  // without it the panel gives no reason to suspect the psychologist is filed as coffee.
-  const filed = n => {
-    const k=(n||'').trim(), x=fileData.find(y=>(y.name||'').trim()===k);
-    const t=x?(x.kind||'daily'):'daily';
-    return tierWord[t]+(tierOverride(k)?' · שינית':'');
-  };
-  html+=top.map(x=>`<div class="row tap" data-merchant="${esc(x.name)}"><span class="lbl"><b>${esc(x.name)}</b><span class="sub">${when(x.day)} · ${filed(x.name)}</span></span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
+  html+=top.map(x=>`<div class="row tap" data-merchant="${esc(x.name)}"><span class="lbl"><b>${esc(x.name)}</b><span class="sub">${when(x.day)} · ${filedAs(x.name)}</span></span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
   if(grouped.length){
     html+='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">חוזר על עצמו</div></div>';
-    html+=grouped.map(g=>`<div class="row tap" data-merchant="${esc(g.name)}"><span class="lbl"><b>${esc(g.name)}</b><span class="sub">${g.count} פעמים החודש · ${filed(g.name)}</span></span><span class="val neg num">-${fmt(g.total)}</span></div>`).join('');
+    html+=grouped.map(g=>`<div class="row tap" data-merchant="${esc(g.name)}"><span class="lbl"><b>${esc(g.name)}</b><span class="sub">${g.count} פעמים החודש · ${filedAs(g.name)}</span></span><span class="val neg num">-${fmt(g.total)}</span></div>`).join('');
   }
   panel.innerHTML=html;
   panel.classList.remove('hidden');
@@ -1247,6 +1242,15 @@ function renderInvestigation(){
 
 /* ---------------- re-filing a merchant ---------------- */
 let tierTarget=null;
+const TIER_WORD={committed:'קבועה',big:'קנייה גדולה',daily:'יומית'};
+
+// Which pot a charge sits in belongs on the row, wherever the row is shown: it is the
+// thing the tap changes, and without it there is no reason to suspect that the ₪370 is
+// being counted as daily money.
+function filedAs(name){
+  const k=(name||'').trim(), x=fileData.find(y=>(y.name||'').trim()===k);
+  return TIER_WORD[x?(x.kind||'daily'):'daily']+(tierOverride(k)?' · שינית':'');
+}
 
 function openTier(name){
   const k=(name||'').trim(); if(!k) return;
@@ -1482,34 +1486,40 @@ function paintWheel(){
   $('padSkip').classList.toggle('hidden',!twoWay);
   $('padPricey').classList.toggle('hidden',!twoWay);
 
+  // Every line answers the same question in the same shape: do this, and then what? A
+  // state of the world ("נשאר לחודש ₪3,429") makes the reader do the subtraction and the
+  // interpretation themselves, and both are the app's job.
   if(!twoWay){
     verdict.classList.add('hidden');
     const left=Math.round(c.remaining-v);
     box.classList.toggle('over',left<0);
     box.innerHTML = v>0
-      ? (left>=0?`יישאר להיום <b>${fmt(left)}</b>`:`חריגה של <b>${fmt(left)}</b> מהתקרה של היום`)
-      : `נשאר להיום <b>${fmt(Math.max(0,c.remaining))}</b>`;
+      ? (left>=0?`אם תקנה את זה יישארו לך <b>${fmt(left)}</b> להיום`
+               : 'אם תקנה את זה ייגמר לך התקציב להיום')
+      : `נשאר לך להיום <b>${fmt(Math.max(0,c.remaining))}</b>`;
     return;
   }
 
-  const {dailyPool,bigLeft,fromDaily,after,perDay,verdict:vd} = checkMaths(v,c);
+  const {bigLeft,fromDaily,after,perDay,verdict:vd} = checkMaths(v,c);
 
-  box.classList.toggle('over',after<0);
-  box.innerHTML = bigLeft>0 && v>=BIG_MIN
-    ? `<b>${fmt(Math.min(v,bigLeft))}</b> מהקופה לקניות גדולות · <b>${fmt(fromDaily)}</b> מהכסף היומי`
-    : `נשאר לחודש <b>${fmt(dailyPool)}</b> · אחרי הקנייה <b>${after<0?'-':''}${fmt(Math.abs(after))}</b>`;
+  // The one thing worth saying before the verdict, and only when it's true: a purchase big
+  // enough to come out of the big-purchase pot doesn't hit the daily money the way its
+  // size suggests, and the verdict alone can't explain why.
+  const split = bigLeft>0 && v>=BIG_MIN;
+  box.classList.remove('over');
+  box.innerHTML = !split ? ''
+    : fromDaily<=0
+      ? 'יוצא כולו מהקופה לקניות גדולות'
+      : `<b>${fmt(Math.min(v,bigLeft))}</b> מהקופה לקניות גדולות · <b>${fmt(fromDaily)}</b> מהכסף היומי`;
 
   if(v<=0){ verdict.classList.add('hidden'); return; }
   verdict.classList.remove('hidden');
   if(vd==='over'){
     verdict.className='verdict over';
-    verdict.textContent='חורג — זה ' + fmt(after) + ' מעבר למה שנשאר לחודש';
-  } else if(vd==='tight'){
-    verdict.className='verdict tight';
-    verdict.textContent='דחוק — יישארו לך ' + fmt(perDay) + ' ליום ל-' + c.daysToCover + ' הימים שנותרו';
+    verdict.textContent='אם תעשה את הקנייה הזו תחרוג מהתקציב של החודש ב-'+fmt(after);
   } else {
-    verdict.className='verdict ok';
-    verdict.textContent='בסדר — יישארו לך ' + fmt(perDay) + ' ליום';
+    verdict.className='verdict '+(vd==='tight'?'tight':'ok');
+    verdict.textContent='אם תעשה את הקנייה הזו יישאר לך לבזבז '+fmt(perDay)+' ליום';
   }
 }
 
@@ -1634,6 +1644,10 @@ $('investigatePanel').addEventListener('click',e=>{
   const row=e.target.closest('[data-merchant]');
   if(row) openTier(row.dataset.merchant);
 });
+$('dayRows').addEventListener('click',e=>{
+  const row=e.target.closest('[data-merchant]');
+  if(row) openTier(row.dataset.merchant);
+});
 $('tierScrim').addEventListener('click',closeTier);
 $('tierClose').addEventListener('click',closeTier);
 document.querySelectorAll('.tier-opt').forEach(b=>
@@ -1660,7 +1674,7 @@ $('dayCloseBtn').addEventListener('click',closeDay);
 $('investigateBtn').addEventListener('click',()=>{
   const p=$('investigatePanel');
   if(p.classList.contains('hidden')){ renderInvestigation(); $('investigateBtn').textContent='סגירה'; }
-  else{ p.classList.add('hidden'); $('investigateBtn').textContent='לאן זה הלך ›'; }
+  else{ p.classList.add('hidden'); $('investigateBtn').textContent='על מה יצא הכסף ›'; }
 });
 
 $('clearBtn').addEventListener('click',()=>{
