@@ -182,8 +182,7 @@
   .addbar{ position:fixed; bottom:0; left:0; right:0; z-index:60;
     padding:12px 16px calc(12px + var(--safe-b));
     background:linear-gradient(to top, var(--bg) 65%, rgba(244,245,247,0)); }
-  /* One primary action at full width, one compact secondary beside it. Both are sized by
-     the flex row — a width:100% here fought the row and pushed the pair off the screen. */
+  /* One way in. The button is sized by the flex row — a width:100% here fought the row. */
   .addbar-inner{ max-width:480px; margin:0 auto; display:flex; gap:10px; align-items:stretch; }
   .addbig{ flex:1; min-width:0; display:flex; align-items:center; justify-content:center;
     gap:9px; border:none; border-radius:18px; background:var(--blue); color:#fff;
@@ -191,17 +190,24 @@
     box-shadow:0 8px 22px -8px rgba(91,108,245,.8); transition:transform .12s; }
   .addbig:active{ transform:scale(.98); }
   .addbig .plus{ font-size:22px; font-weight:500; line-height:1; }
-  .addcheck{ flex:none; width:58px; height:58px; border:none; border-radius:18px;
-    background:var(--card); color:var(--blue); display:grid; place-items:center;
-    box-shadow:0 4px 18px -10px rgba(24,28,50,.65); transition:transform .12s; }
-  .addcheck:active{ transform:scale(.94); }
-  .addcheck svg{ width:24px; height:24px; fill:currentColor; }
+  /* Each choice says what it does to the money, so the tiers don't have to be known
+     in advance to be chosen between. */
+  .tier-opt{ text-align:center; line-height:1.35; }
+  .tier-opt .sub{ display:block; font-size:13px; font-weight:400; color:var(--ink-3); margin-top:3px; }
+  .tier-opt.on{ background:var(--blue); color:#fff; }
+  .tier-opt.on .sub{ color:rgba(255,255,255,.85); }
+  /* A row that can be re-filed says so by responding to the touch. */
+  .row.tap{ cursor:pointer; }
+  .row.tap:active{ opacity:.55; }
 
   .verdict{ border-radius:14px; padding:13px 15px; margin-top:12px; font-size:15px;
     font-weight:600; text-align:center; }
   .verdict.ok{ background:var(--green-soft); color:#1F6E48; }
   .verdict.tight{ background:#FEF6E7; color:#8A6412; }
   .verdict.over{ background:var(--orange-soft); color:#A8431B; }
+  /* Says why a second button just appeared, without arguing with the verdict above it. */
+  .pricey{ text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-3);
+    margin-top:8px; letter-spacing:.2px; }
 
   /* ---------- keypad ---------- */
   .pad{ padding-bottom:calc(18px + var(--safe-b)); }
@@ -335,14 +341,15 @@
   <div class="card">
     <div class="head-line">
       <div class="card-t">החודש</div>
-      <button class="linkbtn hidden" id="investigateBtn" style="width:auto; padding:0">לאן זה הלך ›</button>
     </div>
     <div class="row"><span class="lbl">יצא בכרטיסי אשראי</span><span class="val num" id="monthSpent">₪0</span></div>
-    <div class="row"><span class="lbl"><span id="avgLabel">ממוצע ליום</span><span class="sub" id="avgNote">היעד הוא ₪300</span></span><span class="val num" id="avgDaily">₪0</span></div>
     <div class="row"><span class="lbl">ימים שנותרו בחודש</span><span class="val num" id="daysLeft">—</span></div>
     <div class="row hidden" id="goalRow"><span class="lbl">יעד חיסכון<span class="sub" id="goalNote"></span></span><span class="val num pos" id="goalVal"></span></div>
-    <div class="row hidden" id="reservedRow"><span class="lbl">שמור מראש<span class="sub" id="reservedNote"></span></span><span class="val num" id="reservedVal"></span></div>
     <div class="banner hidden" id="forecast" style="margin:16px 0 0"></div>
+    <!-- The link sits with what it opens: right above the panel it unfolds, under the
+         forecast banner. In the card header it was a heading that revealed a list
+         halfway down the card. -->
+    <button class="linkbtn hidden" id="investigateBtn" style="text-align:right; margin-top:14px">על מה יצא הכסף ›</button>
     <div id="investigatePanel" class="hidden"></div>
   </div>
 
@@ -357,10 +364,7 @@
 
 <div class="addbar">
   <div class="addbar-inner">
-    <button class="addbig" id="openPad"><span class="plus">+</span><span>הוספת הוצאה</span></button>
-    <button class="addcheck" id="openCheck" aria-label="בדיקה לפני קנייה">
-      <svg viewBox="0 0 24 24"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2m0 3v3h10V5zm.5 6a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m-9 4a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5m4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5"/></svg>
-    </button>
+    <button class="addbig" id="openPad"><span class="plus">+</span><span>קנייה חדשה</span></button>
   </div>
 </div>
 
@@ -391,6 +395,19 @@
   <button class="btn btn-ghost" id="dayCloseBtn" style="margin-top:18px">סגירה</button>
 </div>
 
+<div class="scrim" id="tierScrim"></div>
+<div class="sheet" id="tierSheet" role="dialog" aria-label="שיוך לקופה">
+  <div class="grab"></div>
+  <h3 id="tierName"></h3>
+  <p class="lead">לאיזו קופה זה שייך? השיוך נשמר לפי שם בית העסק, וגם החיובים הבאים ממנו ילכו לשם.</p>
+  <div class="stack" style="margin-top:16px">
+    <button class="btn btn-ghost tier-opt" data-tier="daily">הוצאה יומית<span class="sub">נוגסת בכסף שנשאר לך להיום</span></button>
+    <button class="btn btn-ghost tier-opt" data-tier="big">קנייה גדולה<span class="sub">יוצאת מהקופה לקניות גדולות</span></button>
+    <button class="btn btn-ghost tier-opt" data-tier="committed">הוצאה קבועה<span class="sub">שמורה מראש, לא נוגעת בכסף היומי</span></button>
+  </div>
+  <button class="btn btn-ghost" id="tierClose" style="margin-top:18px">ביטול</button>
+</div>
+
 <div class="scrim" id="padScrim"></div>
 <div class="sheet pad" id="padSheet" role="dialog" aria-label="הוספת הוצאה">
   <div class="grab"></div>
@@ -404,6 +421,7 @@
   </div>
   <div class="pad-left" id="padLeft"></div>
   <div class="verdict hidden" id="padVerdict"></div>
+  <div class="pricey hidden" id="padPricey">קנייה יקרה</div>
   <input class="pad-desc" id="padDesc" placeholder="על מה? (לא חובה)" autocomplete="off">
   <div class="padrow">
     <button class="btn btn-primary" id="padSave">הוספה</button>
@@ -428,6 +446,21 @@
     <input type="number" id="budgetInput" inputmode="numeric" step="100" min="0" dir="ltr" placeholder="9300">
     <div class="hint" id="budgetHint"></div>
   </div>
+
+  <hr style="border:none; border-top:1px solid #E4E6EC; margin:22px 0 20px">
+
+  <h3>המספרים שלך</h3>
+  <p class="lead">מאיפה מגיע המספר שכתוב במסך הראשי.</p>
+  <div id="mathRows"></div>
+  <p class="lead hidden" id="mathNote" style="margin-top:12px; font-size:14px">
+    "לבזבז" זה הוצאות יומיות בכרטיס אשראי בלבד — בלי החשבונות הקבועים ובלי קניות
+    גדולות מעל ₪1,000, שעליהם כבר שמור כסף בצד. זה גם לא הכסף שיש בחשבון הבנק,
+    אלא התקציב שהאפליקציה מחלקת.
+  </p>
+  <div class="row hidden" id="reservedRow"><span class="lbl">שמור מראש<span class="sub" id="reservedNote"></span></span><span class="val num" id="reservedVal"></span></div>
+  <div class="row"><span class="lbl">ממוצע ליום מתחילת החודש<span class="sub" id="avgNote"></span></span><span class="val num" id="avgDaily">₪0</span></div>
+
+  <hr style="border:none; border-top:1px solid #E4E6EC; margin:22px 0 20px">
 
   <div class="field" style="margin-top:14px">
     <label>תקציב אוטומטי מההיסטוריה</label>
@@ -477,6 +510,7 @@
   </details>
 
   <button class="btn btn-ghost" id="sheetCloseBtn" style="margin-top:20px">סגירה</button>
+  <p class="lead hidden" id="versionLine" style="margin-top:14px; text-align:center; font-size:13px"></p>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -504,6 +538,8 @@ let dupSeen = null;
 // ₪ to keep back each month. It comes off the daily-decisions tier alone, so the budget
 // is always the measured baseline minus this. null = spend at the measured rate.
 let savingsGoal = null;
+// {merchant: 'committed'|'big'|'daily'} — a manual answer that beats the automatic tier.
+let overrides = {};
 
 // One record per pre-purchase check above CHECK_MIN. This is the only place the app learns
 // what someone was about to do with their money before they did it.
@@ -525,6 +561,7 @@ function save(){ try{
   localStorage.setItem('offered',offered||'');
   localStorage.setItem('dupSeen',dupSeen?JSON.stringify(dupSeen):'');
   localStorage.setItem('savingsGoal',savingsGoal!=null?String(savingsGoal):'');
+  localStorage.setItem('overrides',JSON.stringify(overrides));
   localStorage.setItem('checks',JSON.stringify(checks));
 }catch(e){} }
 function load(){ try{
@@ -543,6 +580,7 @@ function load(){ try{
   offered=localStorage.getItem('offered')||null;
   const ds=localStorage.getItem('dupSeen'); if(ds) dupSeen=JSON.parse(ds);
   const sg=localStorage.getItem('savingsGoal'); if(sg) savingsGoal=parseFloat(sg)||null;
+  const ov=localStorage.getItem('overrides'); if(ov) overrides=JSON.parse(ov)||{};
   const ck=localStorage.getItem('checks'); if(ck) checks=JSON.parse(ck);
   // The tally is monthly, like everything else on that card.
   checks=checks.filter(c=>c.ym===ym);
@@ -556,7 +594,19 @@ function load(){ try{
   // Entries written before this field existed would otherwise read as base 0 and make
   // every charge RiseUp has already reported today look like it just arrived.
   for(const e of manualData) if(typeof e.base!=='number') e.base=riseupToday();
+  retier();
 }catch(e){} }
+
+// Overrides apply to what is already on screen, not only to whatever the next sync
+// brings — a correction made now that waited for the next poll to take effect would look
+// like it hadn't worked. Charges stored before kind0 existed adopt their current tier as
+// the automatic one, which is what it was.
+function retier(){
+  for(const x of fileData){
+    if(x.kind0==null) x.kind0 = x.kind || (x.amt>=BIG_MIN?'big':'daily');
+    x.kind = tierOverride(x.name) || x.kind0;
+  }
+}
 
 /* ---------------- CSV (fallback) ---------------- */
 function parseCSV(text){
@@ -582,7 +632,11 @@ function ingestCSV(rows){
     const amt=parseFloat(row[idx['סכום']]); if(isNaN(amt)||amt>=0) continue;
     const d=parseDMY(row[idx['תאריך התשלום']]);
     if(!d||d.getFullYear()!==cy||d.getMonth()!==cm) continue;
-    out.push({name:row[idx['שם העסק']]||'',amt:Math.abs(amt),d:d.getDate()});
+    // A CSV carries no commitment fields, so the amount is all there is to go on — which
+    // is exactly the case an override is for.
+    const name=row[idx['שם העסק']]||'', a=Math.abs(amt);
+    out.push({name,amt:a,d:d.getDate(),kind0:a>=BIG_MIN?'big':'daily',
+              kind:tierOverride(name)||(a>=BIG_MIN?'big':'daily')});
   }
   fileData=out;
 }
@@ -598,7 +652,24 @@ function ymNow(){ const n=new Date(); return n.getFullYear()+'-'+String(n.getMon
 //   big       - a one-off large purchase. A decision, but not a daily one.
 //   daily     - everything else: the spending the daily number is actually about.
 const BIG_MIN = 1000;
-function tierOf(t,amt){
+// BIG_MIN is a decision, not a fact: a single ₪800 purchase lands in the daily tier and
+// reads exactly like a week of coffee. So the breakdown counts the daily tier's own
+// one-offs separately — "already spent" otherwise hides the difference between a month
+// lived expensively and three purchases that happened to fall under the line.
+const ONEOFF_MIN = 300;
+
+// And where the threshold is wrong, it can be overruled. RiseUp knows what it has been
+// told; it does not know that ₪800 to a psychologist is a standing commitment rather
+// than a splurge. The override is keyed by merchant, not by charge, because the answer
+// is a fact about the merchant and next month's charge deserves it too.
+function tierOverride(name){
+  const k=(name||'').trim();
+  return k && overrides[k] ? overrides[k] : null;
+}
+function tierOf(t,amt,name){
+  return tierOverride(name) || baseTier(t,amt);
+}
+function baseTier(t,amt){
   if(t.commitmentId!=null || t.actualType==='fixed' || t.isInstallment) return 'committed';
   return amt>=BIG_MIN ? 'big' : 'daily';
 }
@@ -617,7 +688,10 @@ function mapApiTransactions(list){
     // anything carried into this cashflow month from earlier, so it counts toward the
     // month but never toward "today".
     const d = iso.slice(0,7)===ym ? parseInt(iso.slice(8,10),10) : 0;
-    out.push({name:t.businessName||'', amt, d, kind:tierOf(t,amt)});
+    // kind0 is what RiseUp's own fields say, kept so lifting an override restores it
+    // instead of leaving the charge stranded wherever the override put it.
+    const name=t.businessName||'';
+    out.push({name, amt, d, kind0:baseTier(t,amt), kind:tierOf(t,amt,name)});
   }
   return out;
 }
@@ -642,7 +716,7 @@ function summarise(list){
     if((x.sourceType||'')!=='creditCard') continue;
     const amt=Math.abs(Number(x.amount));
     if(!isFinite(amt)||amt<=0) continue;
-    t[tierOf(x,amt)]+=amt;
+    t[tierOf(x,amt,x.businessName)]+=amt;
   }
   return t;
 }
@@ -677,7 +751,8 @@ async function backfill(force){
       history.error=e.message||'שגיאה'; break;
     }
   }
-  history.builtFor=ymNow(); save();
+  // Freshly measured with whatever overrides are in force, so the warning has been answered.
+  history.builtFor=ymNow(); history.stale=false; save();
   historyLine();
   if(months.length>=MIN_MONTHS) maybeOfferBudget();
 }
@@ -693,6 +768,9 @@ function historyLine(){
   else if(n<MIN_MONTHS) el.textContent='נטענו '+n+' חודשים בלבד. צריך לפחות '+MIN_MONTHS+' כדי להציע תקציב.';
   else if(derived) el.innerHTML='התקציב הנגזר פעיל, לפי '+n+' חודשים.';
   else el.innerHTML='נטענו '+n+' חודשים. ההצעה מוכנה: <b>'+fmt(d.total)+' לחודש</b>.';
+  // A budget measured before a re-filing still counts the merchant in the old tier, and
+  // the reserve won't grow to meet it until the history is measured again.
+  if(history.stale && n) el.innerHTML+='<br><span class="warn">שינית שיוך של בית עסק. משיכת היסטוריה מחדש תעדכן את התקציב לפי הסיווג החדש.</span>';
   $('recShowBtn').classList.toggle('hidden', !d || !!derived);
 }
 
@@ -858,10 +936,12 @@ function calc(){
   const spentMonth=fileData.reduce((s,x)=>s+x.amt,0);
   const daysLeft=daysInMonth-dom;
 
-  // What each tier has actually cost so far this month.
+  // What each tier has actually cost so far this month. RiseUp only: a provisional entry
+  // is an estimate of a charge that hasn't landed, and folding it in here would dock today
+  // twice — once through spentToday, and again through the ceiling recomputed from the
+  // pool it just shrank.
   const tiers={committed:0,big:0,daily:0};
   for(const x of fileData) tiers[x.kind||'daily']+=x.amt;
-  for(const e of manualToday) tiers.daily+=e.amt;
 
   // One budget, one place it comes from. With history, the derived figures are the
   // measurement of what this costs today and the goal is the amount to come off it —
@@ -882,8 +962,16 @@ function calc(){
   // reported that nothing at all could be spent.
   const daysToCover=daysLeft+1;
   const spentDaily = derived ? tiers.daily : spentMonth;
-  const pool = dailyBudget-spentDaily;
-  const dynamicCeiling=Math.min(target,Math.max(0,pool/daysToCover));
+
+  // Today's allowance is settled by what the month looked like when the day began, so it
+  // holds still while the day is spent. Dividing a pool that today has already been taken
+  // out of by a day count that still includes today charged today twice, and the ceiling
+  // sank under its own spending: buy lunch and the number lunch is measured against drops.
+  const spentDailyToday = fileData
+    .filter(x=>x.d===dom && (derived ? (x.kind||'daily')==='daily' : true))
+    .reduce((s,x)=>s+x.amt,0);
+  const poolPrior = dailyBudget-(spentDaily-spentDailyToday);
+  const dynamicCeiling=Math.min(target,Math.max(0,poolPrior/daysToCover));
   const remaining=dynamicCeiling-spentToday;
 
   // Every per-day figure measures the same thing the daily target does. Averaging the
@@ -901,7 +989,8 @@ function calc(){
 
   return {now,m,dom,daysInMonth,remaining,spentToday,spentMonth,allToday,avg,daysLeft,
           dynamicCeiling,projected,projectedDiff,totalBudget,target,tiers,daysToCover,
-          dailyBudget,reserved,spentDaily};
+          dailyBudget,reserved,spentDaily,spentDailyPrior:spentDaily-spentDailyToday,poolPrior,
+          manualSum:manualToday.reduce((s,e)=>s+e.amt,0)};
 }
 
 /* ---------------- render ---------------- */
@@ -935,7 +1024,7 @@ function render(animate){
 
   const list=$('todayList');
   list.innerHTML = c.allToday.length>0
-    ? c.allToday.map(x=>`<div class="row">${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${x.manual?'<span class="sub">רישום זמני</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('')
+    ? c.allToday.map(x=>`<div class="row${x.manual?'':' tap'}"${x.manual?'':` data-merchant="${esc(x.name||'')}"`}>${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${x.manual?'<span class="sub">רישום זמני</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('')
     : '<div class="blank"><div class="t">עוד לא נרשמה הוצאה היום</div></div>';
 
   const dup=dupState(), dw=$('dupWarn');
@@ -948,13 +1037,14 @@ function render(animate){
 
   $('monthSpent').textContent=fmt(c.spentMonth);
 
+  // Lives in settings now: it describes the month rather than driving the next decision.
   const avgEl=$('avgDaily');
   avgEl.textContent=fmt(c.avg);
   avgEl.className='val num '+(c.avg>c.target?'neg':'pos');
-  $('avgNote').textContent=(c.avg>c.target?'מעל היעד של ':'מתחת ליעד של ')+fmt(c.target);
-  $('avgLabel').textContent = derived ? 'ממוצע יומי להחלטות' : 'ממוצע ליום';
+  $('avgNote').textContent=(c.avg>c.target?'מעל היעד של ':'מתחת ליעד של ')+fmt(c.target)+' ליום';
 
   $('daysLeft').textContent=c.daysLeft;
+  renderMath(c);
 
   const gr=$('goalRow');
   if(savingsGoal!=null && derived){
@@ -1013,6 +1103,39 @@ function render(animate){
   refreshStatus();
 }
 
+// The headline number, spelled out in the order it is computed. Every line names what its
+// number *is* — a column of bare amounts left "₪660" meaning nothing, because the reader
+// still had to guess whether it was in the bank, in the budget, or left to spend.
+function renderMath(c){
+  const out=[];
+  const row=(label,val,sub,cls)=>out.push(
+    '<div class="row"><span class="lbl">'+label
+    + (sub?'<span class="sub">'+sub+'</span>':'')+'</span>'
+    + '<span class="val num '+(cls||'')+'">'+val+'</span></div>');
+
+  if(derived && savingsGoal>0) row('שמת בצד לחיסכון',fmt(savingsGoal),'','pos');
+  row(derived?'יש לך לבזבז החודש בכרטיס האשראי':'התקציב שלך לחודש',fmt(c.dailyBudget));
+  const oneOffs=fileData.filter(x=>x.d!==c.dom && (derived?(x.kind||'daily')==='daily':true)
+                                   && x.amt>=ONEOFF_MIN);
+  const oneOffSum=oneOffs.reduce((s,x)=>s+x.amt,0);
+  row('כבר בזבזת עד אתמול',fmt(c.spentDailyPrior),
+      oneOffs.length ? 'מזה '+fmt(oneOffSum)+' ב-'+oneOffs.length
+        +(oneOffs.length===1?' קנייה בודדת':' קניות בודדות')+' מעל '+fmt(ONEOFF_MIN) : '');
+  row('נשאר לבזבז מהיום עד סוף החודש',(c.poolPrior<0?'-':'')+fmt(c.poolPrior),'',c.poolPrior<0?'neg':'');
+  row('ימים שנשארו בחודש (כולל היום)',c.daysToCover);
+  // The cap is the one line in the table that isn't plain arithmetic, so it says so.
+  row('אז מותר לך לבזבז היום',fmt(c.dynamicCeiling),
+      c.poolPrior/c.daysToCover>c.target ? 'לא יותר מ'+fmt(c.target)+' ליום, גם כשנשאר יותר' : '');
+  row('מזה כבר יצא היום',fmt(c.spentToday));
+  row(c.remaining<0?'חרגת היום':'נשאר לך להיום',
+      (c.remaining<0?'-':'')+fmt(c.remaining),'',c.remaining<0?'neg':'pos');
+
+  $('mathRows').innerHTML=out.join('');
+  // Without a derived budget there are no separate tiers, so the caveat about what the
+  // figure leaves out would be describing a split that doesn't exist.
+  $('mathNote').classList.toggle('hidden',!derived);
+}
+
 // Spending per day for the last week. Today comes from spentToday so it includes the
 // wheel's provisional entry and matches the headline; earlier days are RiseUp only.
 function renderChart(c){
@@ -1068,9 +1191,12 @@ function renderDayDetail(c){
   $('dayTitle').textContent='יום '+DAYS[dt.getDay()]+', '+chartDay+' ב'+MONTHS[c.m];
   $('daySub').textContent=items.length?'יצא באותו יום':'';
   $('dayTotal').textContent=total>0?'-'+fmt(total):'';
+  // Re-filing belongs wherever a charge is looked at, and this drawer is where a day gets
+  // examined: it is the moment someone notices the ₪370 that shouldn't be daily money.
   $('dayRows').innerHTML = items.length
-    ? items.map(x=>'<div class="row"><span class="lbl"><b>'+esc(x.name||'הוצאה')+'</b>'
-        + (x.manual?'<span class="sub">רישום זמני</span>':'')+'</span>'
+    ? items.map(x=>'<div class="row'+(x.manual?'':' tap')+'"'
+        + (x.manual?'':' data-merchant="'+esc(x.name||'')+'"')+'><span class="lbl"><b>'+esc(x.name||'הוצאה')+'</b>'
+        + (x.manual?'<span class="sub">רישום זמני</span>':'<span class="sub">'+filedAs(x.name)+'</span>')+'</span>'
         + '<span class="val neg num">-'+fmt(x.amt)+'</span></div>').join('')
     : '<div class="blank"><div class="t">לא יצא כסף ביום הזה</div></div>';
 }
@@ -1100,17 +1226,60 @@ function renderInvestigation(){
   }
   const grouped=Object.values(groups).filter(g=>g.count>=2).sort((a,b)=>b.total-a.total).slice(0,6);
 
-  let html='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">ההוצאות הגדולות</div></div>';
+  let html='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">ההוצאות הגדולות</div></div>'
+    + '<p class="card-s" style="font-size:13.5px; margin:0 0 4px">לחיצה על שורה משייכת אותה לקופה אחרת.</p>';
   // day: the day of the purchase, or 0 for a charge carried into this cashflow month
   // from an earlier purchase.
   const when = d => d>0 ? d+' ב'+MONTHS[new Date().getMonth()] : 'חיוב מקנייה קודמת';
-  html+=top.map(x=>`<div class="row"><span class="lbl"><b>${esc(x.name)}</b><span class="sub">${when(x.day)}</span></span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
+  html+=top.map(x=>`<div class="row tap" data-merchant="${esc(x.name)}"><span class="lbl"><b>${esc(x.name)}</b><span class="sub">${when(x.day)} · ${filedAs(x.name)}</span></span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
   if(grouped.length){
     html+='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">חוזר על עצמו</div></div>';
-    html+=grouped.map(g=>`<div class="row"><span class="lbl"><b>${esc(g.name)}</b><span class="sub">${g.count} פעמים החודש</span></span><span class="val neg num">-${fmt(g.total)}</span></div>`).join('');
+    html+=grouped.map(g=>`<div class="row tap" data-merchant="${esc(g.name)}"><span class="lbl"><b>${esc(g.name)}</b><span class="sub">${g.count} פעמים החודש · ${filedAs(g.name)}</span></span><span class="val neg num">-${fmt(g.total)}</span></div>`).join('');
   }
   panel.innerHTML=html;
   panel.classList.remove('hidden');
+}
+
+/* ---------------- re-filing a merchant ---------------- */
+let tierTarget=null;
+const TIER_WORD={committed:'קבועה',big:'קנייה גדולה',daily:'יומית'};
+
+// Which pot a charge sits in belongs on the row, wherever the row is shown: it is the
+// thing the tap changes, and without it there is no reason to suspect that the ₪370 is
+// being counted as daily money.
+function filedAs(name){
+  const k=(name||'').trim(), x=fileData.find(y=>(y.name||'').trim()===k);
+  return TIER_WORD[x?(x.kind||'daily'):'daily']+(tierOverride(k)?' · שינית':'');
+}
+
+function openTier(name){
+  const k=(name||'').trim(); if(!k) return;
+  tierTarget=k;
+  $('tierName').textContent=k;
+  const x=fileData.find(y=>(y.name||'').trim()===k);
+  const now=tierOverride(k) || (x?(x.kind||'daily'):'daily');
+  document.querySelectorAll('.tier-opt').forEach(b=>b.classList.toggle('on',b.dataset.tier===now));
+  $('tierScrim').classList.add('open'); $('tierSheet').classList.add('open');
+}
+function closeTier(){
+  tierTarget=null;
+  $('tierScrim').classList.remove('open'); $('tierSheet').classList.remove('open');
+}
+
+// Choosing the tier RiseUp already assigned clears the override rather than freezing it:
+// otherwise agreeing with the automatic answer would quietly pin the merchant to it.
+function setTier(tier){
+  const k=tierTarget; if(!k) return;
+  const x=fileData.find(y=>(y.name||'').trim()===k);
+  const auto=x?(x.kind0||'daily'):'daily';
+  if(tier===auto) delete overrides[k]; else overrides[k]=tier;
+  retier();
+  // The derived budget was measured before this correction, so its tiers still hold the
+  // old answer. Rebuilding is six API calls; it is offered, not taken.
+  history.stale = Object.keys(overrides).length>0;
+  closeTier(); save(); render(true); historyLine();
+  toast(tier==='daily' ? 'חזר להוצאה יומית'
+      : tier==='big'   ? 'הועבר לקניות גדולות' : 'הועבר להוצאות קבועות');
 }
 
 /* ---------------- budget recommendation ---------------- */
@@ -1160,19 +1329,46 @@ function goalHint(v){
   const goal=(v!=null && isFinite(v) && v>0) ? Math.min(v,derived.dailyTarget) : 0;
   const perDay=(derived.dailyTarget-goal)/dim;
   const pace=c.dom>0?c.spentDaily/c.dom:0;
-  let t='הבסיס שלך — מה שאתה מוציא בפועל — הוא <b>'+fmt(derived.total)+' בחודש</b>.'
+  // The old wording put two different pots in one sentence — a total that includes the
+  // commitments beside a per-day figure derived from the daily tier alone — and the two
+  // numbers didn't multiply out. Each line now says which pot it is talking about.
+  let t='אתה מוציא <b>'+fmt(derived.total)+' בחודש</b> בכרטיסי האשראי.'
+    + '<br>מתוכם '+fmt(derived.committed+derived.big)+' הולכים לחשבונות קבועים ולקניות גדולות — לא נוגעים בהם.'
+    + '<br>נשארות <b>'+fmt(derived.dailyTarget)+'</b> לכל השאר.'
     + '<br>' + (goal>0
-      ? 'חיסכון של '+fmt(goal)+' משאיר תקציב של <b>'+fmt(derived.total-goal)+'</b>, כלומר <b>'+fmt(perDay)+' ליום</b> להחלטות היומיות.'
-      : 'בלי יעד חיסכון התקציב שווה לבסיס: <b>'+fmt(perDay)+' ליום</b> להחלטות היומיות.');
+      ? 'אם תחסוך '+fmt(goal)+', נשארות <b>'+fmt(derived.dailyTarget-goal)+'</b> — כלומר <b>'+fmt(perDay)+' ליום</b>.'
+      : 'בלי יעד חיסכון זה <b>'+fmt(perDay)+' ליום</b>.');
   if(pace>0){
     const cut=Math.round((1-perDay/pace)*100);
-    t += '<br>אתה כרגע על <b>'+fmt(pace)+' ליום</b>' + (cut>0?' — קיצוץ של '+cut+'%':'') + '.';
+    t += '<br>היום אתה מוציא <b>'+fmt(pace)+' ליום</b>' + (cut>0?', אז זה אומר לרדת ב-'+cut+'%':'') + '.';
     if(cut>=40) t += '<br><span class="warn">קיצוץ בסדר גודל כזה כמעט תמיד נשבר. יעד קטן שמחזיק שווה יותר.</span>';
   }
   $('goalHint').innerHTML=t;
 }
 
+// Which build is on screen, asked once per load. A deploy that silently didn't happen
+// looks exactly like a deploy that did until something on the page happens to differ, and
+// by then the guessing has already started.
+let versionShown=false;
+async function showVersion(){
+  if(versionShown) return;
+  versionShown=true;
+  const el=$('versionLine');
+  try{
+    const r=await fetch('/api/version',{headers:{Accept:'application/json'}});
+    if(!r.ok) return;
+    const v=await r.json();
+    if(!v.sha) return;                      // running locally, or not from a git deploy
+    const t=new Date(v.startedAt);
+    const when=t.getDate()+'.'+(t.getMonth()+1)+' בשעה '
+      + String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+    el.textContent='גרסה '+v.sha+(v.branch?' ('+v.branch+')':'')+' · עלתה ב-'+when;
+    el.classList.remove('hidden');
+  }catch(e){ /* static hosting, no server to ask */ }
+}
+
 function openSheet(){
+  showVersion();
   $('tokenInput').value=apiCfg.token||'';
   $('baseInput').value=apiCfg.base||'';
   // With history there is a measured baseline, so the question worth asking is how much
@@ -1272,8 +1468,10 @@ function indexUnderBand(){
   return item?+item.dataset.i:null;
 }
 
-let padMode='add';   // 'add' = record a spend, 'check' = simulate a purchase
-
+// One way in, and it always asks the same question: what is this about to cost? Recording
+// a spend and checking one before it happens were two doors onto the same wheel, and the
+// only real difference — whether the answer counts as a decision — is the amount, not the
+// door. So the amount decides.
 function paintWheel(){
   wheelItems.forEach((el,i)=>{
     const d=Math.abs(i-wheelIndex);
@@ -1282,42 +1480,46 @@ function paintWheel(){
   const v=wheelValue(), c=calc(), box=$('padLeft'), verdict=$('padVerdict');
   $('padSave').disabled = v<=0;
 
-  if(padMode==='add'){
+  // Two buttons only once the amount is a decision. Below the threshold a purchase is a
+  // reflex, and it's weighed against the day it lands on rather than against the month.
+  const twoWay = v>=CHECK_MIN;
+  $('padSkip').classList.toggle('hidden',!twoWay);
+  $('padPricey').classList.toggle('hidden',!twoWay);
+
+  // Every line answers the same question in the same shape: do this, and then what? A
+  // state of the world ("נשאר לחודש ₪3,429") makes the reader do the subtraction and the
+  // interpretation themselves, and both are the app's job.
+  if(!twoWay){
     verdict.classList.add('hidden');
     const left=Math.round(c.remaining-v);
     box.classList.toggle('over',left<0);
     box.innerHTML = v>0
-      ? (left>=0?`יישאר להיום <b>${fmt(left)}</b>`:`חריגה של <b>${fmt(left)}</b> מהתקרה של היום`)
-      : `נשאר להיום <b>${fmt(Math.max(0,c.remaining))}</b>`;
+      ? (left>=0?`אם תקנה את זה יישארו לך <b>${fmt(left)}</b> להיום`
+               : 'אם תקנה את זה ייגמר לך התקציב להיום')
+      : `נשאר לך להיום <b>${fmt(Math.max(0,c.remaining))}</b>`;
     return;
   }
 
-  const {dailyPool,bigLeft,fromDaily,after,perDay,verdict:vd} = checkMaths(v,c);
+  const {bigLeft,fromDaily,after,perDay,verdict:vd} = checkMaths(v,c);
 
-  box.classList.toggle('over',after<0);
-  box.innerHTML = v<=0
-    ? `נשאר לחודש <b>${fmt(dailyPool)}</b> להוצאות היומיות`
-    : (bigLeft>0 && v>=BIG_MIN
-        ? `<b>${fmt(Math.min(v,bigLeft))}</b> מהקופה לקניות גדולות · <b>${fmt(fromDaily)}</b> מהכסף היומי`
-        : `נשאר לחודש <b>${fmt(dailyPool)}</b> · אחרי הקנייה <b>${after<0?'-':''}${fmt(Math.abs(after))}</b>`);
-
-  // Two buttons only once the amount is a decision. Under the threshold the single
-  // record button stays, because there is nothing there worth recording as a choice.
-  const twoWay = v>=CHECK_MIN;
-  $('padSkip').classList.toggle('hidden',!twoWay);
-  $('padSave').textContent = twoWay ? 'קניתי' : 'רשום את זה';
+  // The one thing worth saying before the verdict, and only when it's true: a purchase big
+  // enough to come out of the big-purchase pot doesn't hit the daily money the way its
+  // size suggests, and the verdict alone can't explain why.
+  const split = bigLeft>0 && v>=BIG_MIN;
+  box.classList.remove('over');
+  box.innerHTML = !split ? ''
+    : fromDaily<=0
+      ? 'יוצא כולו מהקופה לקניות גדולות'
+      : `<b>${fmt(Math.min(v,bigLeft))}</b> מהקופה לקניות גדולות · <b>${fmt(fromDaily)}</b> מהכסף היומי`;
 
   if(v<=0){ verdict.classList.add('hidden'); return; }
   verdict.classList.remove('hidden');
   if(vd==='over'){
     verdict.className='verdict over';
-    verdict.textContent='חורג — זה ' + fmt(after) + ' מעבר למה שנשאר לחודש';
-  } else if(vd==='tight'){
-    verdict.className='verdict tight';
-    verdict.textContent='דחוק — יישארו לך ' + fmt(perDay) + ' ליום ל-' + c.daysToCover + ' הימים שנותרו';
+    verdict.textContent='אם תעשה את הקנייה הזו תחרוג מהתקציב של החודש ב-'+fmt(after);
   } else {
-    verdict.className='verdict ok';
-    verdict.textContent='בסדר — יישארו לך ' + fmt(perDay) + ' ליום';
+    verdict.className='verdict '+(vd==='tight'?'tight':'ok');
+    verdict.textContent='אם תעשה את הקנייה הזו יישאר לך לבזבז '+fmt(perDay)+' ליום';
   }
 }
 
@@ -1326,7 +1528,10 @@ function paintWheel(){
 // what the reserve can't absorb eats into the daily money — which is the part that
 // actually changes how the rest of the month feels.
 function checkMaths(v,c){
-  const dailyPool = derived ? derived.dailyTarget-c.tiers.daily : c.totalBudget-c.spentMonth;
+  // The same pot the rest of the app spends from. Reading the derived target directly
+  // skipped the savings goal, so this screen offered a month's worth of money the
+  // headline had already set aside — two answers to one question.
+  const dailyPool = c.dailyBudget-c.spentDaily-c.manualSum;
   const bigLeft   = derived ? Math.max(0,derived.big-c.tiers.big) : 0;
   const fromDaily = v>=BIG_MIN ? Math.max(0,v-bigLeft) : v;
   const after     = dailyPool-fromDaily;
@@ -1359,12 +1564,11 @@ $('wheelScroll').addEventListener('click',e=>{
   el.scrollIntoView({block:'center',behavior:'smooth'});
 });
 
-function openPad(mode){
-  padMode = mode==='check' ? 'check' : 'add';
-  $('padTitle').textContent = padMode==='check' ? 'כמה עומדת לעלות הקנייה?' : 'כמה הוצאת עכשיו?';
-  $('padSave').textContent  = padMode==='check' ? 'רשום את זה' : 'הוספה';
+function openPad(){
+  $('padTitle').textContent='כמה עומדת לעלות הקנייה?';
+  $('padSave').textContent='קניתי';
   $('padSkip').classList.add('hidden');
-  $('padDesc').classList.toggle('hidden', padMode==='check');
+  $('padPricey').classList.add('hidden');
   $('padDesc').value='';
   wheelIndex=0;
   $('wheelScroll').scrollTop=0;
@@ -1376,15 +1580,14 @@ function openPad(mode){
 function closePad(answered){
   // Closed without choosing: the check is still real, and the next sync may find the
   // charge that answers it.
-  if(!answered && padMode==='check'){
+  if(!answered){
     const v=wheelValue();
     if(v>=CHECK_MIN){ recordCheck(v,null); save(); render(false); }
   }
   $('padScrim').classList.remove('open'); $('padSheet').classList.remove('open');
 }
 
-$('openPad').addEventListener('click',()=>openPad('add'));
-$('openCheck').addEventListener('click',()=>openPad('check'));
+$('openPad').addEventListener('click',()=>openPad());
 // Wrapped, not passed directly: the click event would arrive as the `answered` argument
 // and every dismissal would look like a decision.
 $('padScrim').addEventListener('click',()=>closePad());
@@ -1394,9 +1597,9 @@ $('padSave').addEventListener('click',()=>{
   const v=wheelValue();
   if(v<=0) return;
   const n=new Date();
-  if(padMode==='check' && v>=CHECK_MIN) recordCheck(v,'bought');
+  if(v>=CHECK_MIN) recordCheck(v,'bought');
   manualData.push({id:Date.now(),amt:v,desc:$('padDesc').value.trim(),ym:ymNow(),d:n.getDate(),base:riseupToday()});
-  closePad(true); save(); render(true); toast('נוסף '+fmt(v));
+  closePad(true); save(); render(true); toast('נרשם '+fmt(v));
 });
 
 // Walking away costs nothing and earns nothing. It is not added to the budget and it does
@@ -1426,10 +1629,29 @@ $('dupDismiss').addEventListener('click',()=>{
 });
 
 $('todayList').addEventListener('click',e=>{
-  const btn=e.target.closest('.del'); if(!btn) return;
-  manualData=manualData.filter(x=>x.id!==parseInt(btn.dataset.id,10));
-  save(); render(true); toast('נמחק');
+  const btn=e.target.closest('.del');
+  if(btn){
+    manualData=manualData.filter(x=>x.id!==parseInt(btn.dataset.id,10));
+    save(); render(true); toast('נמחק');
+    return;
+  }
+  const row=e.target.closest('[data-merchant]');
+  if(row) openTier(row.dataset.merchant);
 });
+
+// Delegated for the same reason as the chart: the panel is rebuilt through innerHTML.
+$('investigatePanel').addEventListener('click',e=>{
+  const row=e.target.closest('[data-merchant]');
+  if(row) openTier(row.dataset.merchant);
+});
+$('dayRows').addEventListener('click',e=>{
+  const row=e.target.closest('[data-merchant]');
+  if(row) openTier(row.dataset.merchant);
+});
+$('tierScrim').addEventListener('click',closeTier);
+$('tierClose').addEventListener('click',closeTier);
+document.querySelectorAll('.tier-opt').forEach(b=>
+  b.addEventListener('click',()=>setTier(b.dataset.tier)));
 
 // Delegated: the chart is rebuilt through innerHTML on every render, so per-column
 // listeners would be discarded on the next sync.
@@ -1452,7 +1674,7 @@ $('dayCloseBtn').addEventListener('click',closeDay);
 $('investigateBtn').addEventListener('click',()=>{
   const p=$('investigatePanel');
   if(p.classList.contains('hidden')){ renderInvestigation(); $('investigateBtn').textContent='סגירה'; }
-  else{ p.classList.add('hidden'); $('investigateBtn').textContent='לאן זה הלך ›'; }
+  else{ p.classList.add('hidden'); $('investigateBtn').textContent='על מה יצא הכסף ›'; }
 });
 
 $('clearBtn').addEventListener('click',()=>{
