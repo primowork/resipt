@@ -196,7 +196,12 @@
   .tier-opt .sub{ display:block; font-size:13px; font-weight:400; color:var(--ink-3); margin-top:3px; }
   .tier-opt.on{ background:var(--blue); color:#fff; }
   .tier-opt.on .sub{ color:rgba(255,255,255,.85); }
+  .tier-group{ display:flex; align-items:center; gap:10px; margin:20px 0 12px;
+    font-size:13.5px; font-weight:600; color:var(--ink-3); }
+  .tier-group::before, .tier-group::after{ content:''; flex:1; height:1px; background:var(--line); }
   /* A row that can be re-filed says so by responding to the touch. */
+  /* Money that isn't coming out of today's number shouldn't shout like money that is. */
+  .val.neg.muted{ color:var(--ink-3); }
   .row.tap{ cursor:pointer; }
   .row.tap:active{ opacity:.55; }
 
@@ -271,6 +276,25 @@
   .field input:focus{ outline:none; border-color:var(--blue); }
   .field .hint{ font-size:14px; color:var(--ink-3); margin-top:8px; line-height:1.6; }
   .field .hint .warn{ color:#A8431B; font-weight:600; }
+  /* The savings goal is the one input on this sheet that decides something — every other
+     number in the app is derived from it — so it is built as its own card rather than as
+     one more grey row among the server address and the token. */
+  .goal-card{ background:var(--card); border-radius:20px; padding:20px; margin-bottom:20px;
+    box-shadow:0 10px 30px -18px rgba(24,28,50,.55), 0 1px 3px rgba(24,28,50,.06); }
+  .goal-card label{ display:block; font-size:18px; font-weight:700; letter-spacing:-.3px;
+    margin-bottom:14px; }
+  .goal-input{ display:flex; align-items:center; gap:8px; background:var(--bg);
+    border:1.5px solid transparent; border-radius:16px; padding:6px 16px;
+    transition:border-color .12s; }
+  .goal-input:focus-within{ border-color:var(--blue); }
+  .goal-input .cur{ font-size:24px; font-weight:600; color:var(--ink-3); }
+  .goal-input input{ flex:1; min-width:0; width:100%; background:none; border:none;
+    color:var(--ink); padding:12px 0; font-size:30px; font-weight:700; font-family:inherit;
+    letter-spacing:-.5px; }
+  .goal-input input:focus{ outline:none; }
+  .goal-card .hint{ font-size:14px; color:var(--ink-3); margin-top:14px; line-height:1.65; }
+  .goal-card .hint .warn{ color:#A8431B; font-weight:600; }
+
   .stack{ display:flex; flex-direction:column; gap:10px; }
   details.adv{ margin-top:22px; border-top:1px solid #E4E6EC; padding-top:16px; }
   details.adv summary{ font-size:15px; color:var(--ink-2); font-weight:500; list-style:none; padding:6px 0; }
@@ -392,6 +416,7 @@
     <div class="day-sum num" id="dayTotal"></div>
   </div>
   <div id="dayRows"></div>
+  <p class="lead hidden" id="dayOther" style="margin-top:14px; font-size:14px"></p>
   <button class="btn btn-ghost" id="dayCloseBtn" style="margin-top:18px">סגירה</button>
 </div>
 
@@ -402,8 +427,14 @@
   <p class="lead">לאיזו קופה זה שייך? השיוך נשמר לפי שם בית העסק, וגם החיובים הבאים ממנו ילכו לשם.</p>
   <div class="stack" style="margin-top:16px">
     <button class="btn btn-ghost tier-opt" data-tier="daily">הוצאה יומית<span class="sub">נוגסת בכסף שנשאר לך להיום</span></button>
+  </div>
+  <!-- The two reserved pots were told apart by their names and nothing else, so the big
+       one read as ordinary spending under a different label. What matters about both is
+       the same sentence, and now they say it in the same words, under one heading. -->
+  <div class="tier-group">שמור מראש — לא נוגס בכסף היומי</div>
+  <div class="stack">
     <button class="btn btn-ghost tier-opt" data-tier="big">קנייה גדולה<span class="sub">יוצאת מהקופה לקניות גדולות</span></button>
-    <button class="btn btn-ghost tier-opt" data-tier="committed">הוצאה קבועה<span class="sub">שמורה מראש, לא נוגעת בכסף היומי</span></button>
+    <button class="btn btn-ghost tier-opt" data-tier="committed">הוצאה קבועה<span class="sub">יוצאת מהכסף ששמור לחשבונות הקבועים</span></button>
   </div>
   <button class="btn btn-ghost" id="tierClose" style="margin-top:18px">ביטול</button>
 </div>
@@ -434,14 +465,19 @@
 <div class="sheet" id="sheet" role="dialog" aria-label="הגדרות">
   <div class="grab"></div>
 
-  <h3>התקציב שלי</h3>
-  <div class="field hidden" id="goalField" style="margin-top:12px">
+  <!-- The one number here that is a decision rather than a reading. It was sitting in the
+       same grey field as the server address, which is the wrong weight for the setting the
+       whole budget is derived from. -->
+  <div class="goal-card hidden" id="goalField">
     <label for="goalInput">כמה תרצה לחסוך החודש?</label>
-    <input type="number" id="goalInput" inputmode="numeric" step="100" min="0" dir="ltr" placeholder="0">
+    <div class="goal-input">
+      <span class="cur">₪</span>
+      <input type="number" id="goalInput" inputmode="numeric" step="100" min="0" dir="ltr" placeholder="0">
+    </div>
     <div class="hint" id="goalHint"></div>
   </div>
 
-  <div class="field" id="budgetField" style="margin-top:12px">
+  <div class="field" id="budgetField">
     <label for="budgetInput">תקציב חודשי לכרטיסי אשראי</label>
     <input type="number" id="budgetInput" inputmode="numeric" step="100" min="0" dir="ltr" placeholder="9300">
     <div class="hint" id="budgetHint"></div>
@@ -893,6 +929,10 @@ function checkTally(){
 /* ---------------- calc ---------------- */
 // What RiseUp has reported for today so far. Stamped onto every manual entry when it is
 // made, so the app can tell later whether new money for today has landed since.
+// Whether a charge is measured against the daily number at all. Without a derived budget
+// there are no separate pots, so everything is.
+function inDaily(kind){ return !derived || (kind||'daily')==='daily'; }
+
 function riseupToday(){
   const dom=new Date().getDate();
   return fileData.reduce((s,x)=>x.d===dom?s+x.amt:s,0);
@@ -929,10 +969,15 @@ function calc(){
   const ym=ymNow();
   const manualToday=manualData.filter(e=>e.ym===ym && e.d===dom);
 
-  const allToday=fileData.filter(x=>x.d===dom).map(x=>({name:x.name,amt:x.amt}));
-  for(const e of manualToday) allToday.push({name:e.desc||'הוצאה',amt:e.amt,manual:true,id:e.id});
+  const allToday=fileData.filter(x=>x.d===dom).map(x=>({name:x.name,amt:x.amt,kind:x.kind||'daily'}));
+  for(const e of manualToday) allToday.push({name:e.desc||'הוצאה',amt:e.amt,manual:true,id:e.id,kind:'daily'});
 
-  const spentToday=allToday.reduce((s,x)=>s+x.amt,0);
+  // Only the daily tier is measured against the daily number. A committed charge that
+  // lands today was reserved months ago, and counting it here wiped out whichever day it
+  // happened to fall on — the exact ambush the tiers exist to prevent. Nothing is hidden:
+  // today's list still shows every charge, each with the pot it came from.
+  const spentToday=allToday.filter(x=>inDaily(x.kind)).reduce((s,x)=>s+x.amt,0);
+  const otherToday=allToday.filter(x=>!inDaily(x.kind)).reduce((s,x)=>s+x.amt,0);
   const spentMonth=fileData.reduce((s,x)=>s+x.amt,0);
   const daysLeft=daysInMonth-dom;
 
@@ -968,7 +1013,7 @@ function calc(){
   // out of by a day count that still includes today charged today twice, and the ceiling
   // sank under its own spending: buy lunch and the number lunch is measured against drops.
   const spentDailyToday = fileData
-    .filter(x=>x.d===dom && (derived ? (x.kind||'daily')==='daily' : true))
+    .filter(x=>x.d===dom && inDaily(x.kind))
     .reduce((s,x)=>s+x.amt,0);
   const poolPrior = dailyBudget-(spentDaily-spentDailyToday);
   const dynamicCeiling=Math.min(target,Math.max(0,poolPrior/daysToCover));
@@ -987,7 +1032,7 @@ function calc(){
   const projected=avg*daysInMonth+Math.max(reserved,tiers.committed+tiers.big);
   const projectedDiff=totalBudget-projected;
 
-  return {now,m,dom,daysInMonth,remaining,spentToday,spentMonth,allToday,avg,daysLeft,
+  return {now,m,dom,daysInMonth,remaining,spentToday,otherToday,spentMonth,allToday,avg,daysLeft,
           dynamicCeiling,projected,projectedDiff,totalBudget,target,tiers,daysToCover,
           dailyBudget,reserved,spentDaily,spentDailyPrior:spentDaily-spentDailyToday,poolPrior,
           manualSum:manualToday.reduce((s,e)=>s+e.amt,0)};
@@ -1024,7 +1069,13 @@ function render(animate){
 
   const list=$('todayList');
   list.innerHTML = c.allToday.length>0
-    ? c.allToday.map(x=>`<div class="row${x.manual?'':' tap'}"${x.manual?'':` data-merchant="${esc(x.name||'')}"`}>${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${x.manual?'<span class="sub">רישום זמני</span>':''}</span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('')
+    // A charge that isn't measured against today says so, or the list and the headline
+    // above it look like they disagree.
+    ? c.allToday.map(x=>`<div class="row${x.manual?'':' tap'}"${x.manual?'':` data-merchant="${esc(x.name||'')}"`}>${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${
+        x.manual ? '<span class="sub">רישום זמני</span>'
+      : inDaily(x.kind) ? ''
+      : `<span class="sub">${TIER_WORD[x.kind]} · לא מהכסף היומי</span>`
+      }</span><span class="val neg num${inDaily(x.kind)?'':' muted'}">-${fmt(x.amt)}</span></div>`).join('')
     : '<div class="blank"><div class="t">עוד לא נרשמה הוצאה היום</div></div>';
 
   const dup=dupState(), dw=$('dupWarn');
@@ -1136,8 +1187,11 @@ function renderMath(c){
   $('mathNote').classList.toggle('hidden',!derived);
 }
 
-// Spending per day for the last week. Today comes from spentToday so it includes the
-// wheel's provisional entry and matches the headline; earlier days are RiseUp only.
+// Spending per day for the last week — the daily tier only, because that is what the goal
+// line across the chart measures. With every tier in the bars, an insurance charge on the
+// 14th towered over a line it was never being judged against. Today comes from spentToday
+// so it carries the wheel's provisional entry and matches the headline; earlier days are
+// RiseUp only.
 function renderChart(c){
   const card=$('weekCard');
   if(fileData.length===0){ card.classList.add('hidden'); return; }
@@ -1147,7 +1201,8 @@ function renderChart(c){
   // A selection made yesterday can fall out of the window once the day rolls over.
   if(chartDay!==null && (chartDay<from || chartDay>c.dom)) chartDay=null;
   for(let d=from;d<=c.dom;d++){
-    const total = d===c.dom ? c.spentToday : fileData.filter(x=>x.d===d).reduce((s,x)=>s+x.amt,0);
+    const total = d===c.dom ? c.spentToday
+      : fileData.filter(x=>x.d===d && inDaily(x.kind)).reduce((s,x)=>s+x.amt,0);
     days.push({d,total});
   }
 
@@ -1180,17 +1235,26 @@ function renderChart(c){
 function renderDayDetail(c){
   if(chartDay===null) return;
 
-  const items = chartDay===c.dom
-    ? c.allToday.map(x=>({name:x.name,amt:x.amt,manual:x.manual}))
-    : fileData.filter(x=>x.d===chartDay).map(x=>({name:x.name,amt:x.amt}));
-  items.sort((a,b)=>b.amt-a.amt);
+  const all = chartDay===c.dom
+    ? c.allToday.map(x=>({name:x.name,amt:x.amt,manual:x.manual,kind:x.kind}))
+    : fileData.filter(x=>x.d===chartDay).map(x=>({name:x.name,amt:x.amt,kind:x.kind}));
+
+  // The drawer explains its own bar, so it holds what the bar counts. The rest of the day
+  // is stated underneath rather than dropped — otherwise a day with a ₪2,000 charge reads
+  // as a quiet day.
+  const items=all.filter(x=>inDaily(x.kind)).sort((a,b)=>b.amt-a.amt);
+  const other=all.filter(x=>!inDaily(x.kind)).reduce((s,x)=>s+x.amt,0);
 
   const total=items.reduce((s,x)=>s+x.amt,0);
   const dt=new Date(c.now.getFullYear(),c.now.getMonth(),chartDay);
 
   $('dayTitle').textContent='יום '+DAYS[dt.getDay()]+', '+chartDay+' ב'+MONTHS[c.m];
-  $('daySub').textContent=items.length?'יצא באותו יום':'';
+  $('daySub').textContent=items.length?'יצא מהכסף היומי':'';
   $('dayTotal').textContent=total>0?'-'+fmt(total):'';
+  $('dayOther').textContent = other>0
+    ? 'ועוד '+fmt(other)+' שכבר היו שמורים בצד — קבועות וקניות גדולות. הם לא נוגסים בכסף היומי.'
+    : '';
+  $('dayOther').classList.toggle('hidden',other<=0);
   // Re-filing belongs wherever a charge is looked at, and this drawer is where a day gets
   // examined: it is the moment someone notices the ₪370 that shouldn't be daily money.
   $('dayRows').innerHTML = items.length
