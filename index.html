@@ -230,6 +230,14 @@
     padding:14px; font-size:16px; font-family:inherit; color:var(--ink); margin:16px 0 12px;
     box-shadow:0 1px 3px rgba(24,28,50,.07); }
   .pad-desc:focus{ outline:none; border-color:var(--blue); }
+  .pad-opts{ display:flex; flex-direction:column; gap:8px; margin-bottom:14px; }
+  .opt-row{ display:flex; gap:8px; }
+  .opt{ flex:1; min-width:0; border:none; border-radius:12px; background:var(--card);
+    color:var(--ink-2); padding:11px 8px; font-size:14px; font-weight:500;
+    font-family:inherit; white-space:nowrap; box-shadow:0 1px 3px rgba(24,28,50,.07);
+    transition:transform .12s; }
+  .opt:active{ transform:scale(.97); }
+  .opt.on{ background:var(--blue); color:#fff; font-weight:600; box-shadow:none; }
 
   /* ---------- wheel ---------- */
   /* Row height is the one number everything derives from — band, spacers and the
@@ -466,6 +474,18 @@
   <div class="verdict hidden" id="padVerdict"></div>
   <div class="pricey hidden" id="padPricey">קנייה יקרה</div>
   <input class="pad-desc" id="padDesc" placeholder="על מה? (לא חובה)" autocomplete="off">
+  <!-- Two facts the app cannot infer and gets wrong in both directions without asking:
+       whether a charge is coming to replace this entry, and whose money it was. -->
+  <div class="pad-opts">
+    <div class="opt-row" id="padWho">
+      <button class="opt on" data-standin="1">שילמתי בכרטיס</button>
+      <button class="opt" data-standin="0">מישהו אחר שילם</button>
+    </div>
+    <div class="opt-row" id="padShare">
+      <button class="opt on" data-share="1">הכל שלי</button>
+      <button class="opt" data-share="0.5">מתחלק</button>
+    </div>
+  </div>
   <div class="padrow">
     <button class="btn btn-primary" id="padSave">הוספה</button>
     <button class="btn btn-skip hidden" id="padSkip">מוותר וחוסך</button>
@@ -620,11 +640,17 @@ function save(){ try{
 }catch(e){} }
 function load(){ try{
   const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m);
-  // Entries are a running tally for one day only — RiseUp delivers the real charge
+  // A stand-in is a running tally for one day only — RiseUp delivers the real charge
   // within a day, so anything not typed today is dropped rather than double-counted.
   // Undated entries predate the stamping and are by definition old.
+  //
+  // An entry someone else paid for has no charge coming, ever. Nothing will replace it,
+  // so deleting it overnight deletes real money that left the household, and it stays
+  // for the month like any other spending.
   const n=new Date(), ym=ymNow();
-  manualData=manualData.filter(e=>e.ym===ym && e.d===n.getDate());
+  manualData=manualData.filter(e=> e.standin===false
+    ? e.ym===ym                          // real money, no charge coming: keep the month
+    : (e.ym===ym && e.d===n.getDate()));  // stand-in: today only
   const f=localStorage.getItem('fileData'); if(f) fileData=JSON.parse(f);
   const c=localStorage.getItem('apiCfg'); if(c) apiCfg=Object.assign({token:'',base:''},JSON.parse(c));
   const s=localStorage.getItem('lastSync'); if(s) lastSync=parseInt(s,10)||null;
@@ -676,6 +702,11 @@ function chargeKey(x){
   return (x && x.name ? String(x.name).trim() : '') + '|' + (x?x.d:0) + '|' + Math.round(x?(x.amt0!=null?x.amt0:x.amt):0);
 }
 function isSplit(x){ return !!splits[chargeKey(x)]; }
+
+// A wheel entry keeps its own split flag rather than a key into `splits`: it has no
+// merchant name to key on. `amt` stays the sum that was typed, so the row can show what
+// the purchase actually cost alongside the half being counted.
+function manualAmt(e){ return e.share===0.5 ? e.amt/2 : e.amt; }
 
 /* ---------------- CSV (fallback) ---------------- */
 function parseCSV(text){
@@ -951,9 +982,14 @@ function reconcileChecks(){
       // Keyed by what the charge is, not by where it sat in the array. Every sync rebuilds
       // fileData from scratch, so a stored index pointed at a different charge next time —
       // and the claim that "this charge is already spoken for" moved with it.
-      const t=fileData[i], key=t.d+':'+Math.round(t.amt)+':'+(t.name||'');
+      //
+      // Against the raw amount, always: retier() halves `amt` on a shared charge, and a
+      // ₪400 check compared against the ₪200 half missed by 200 on a tolerance of 32, so
+      // every split charge left its check open forever.
+      const t=fileData[i], raw=(t.amt0!=null?t.amt0:t.amt);
+      const key=t.d+':'+Math.round(raw)+':'+(t.name||'');
       if(taken.has(key) || t.d<c.d || t.d>c.d+MATCH_DAYS) continue;
-      if(Math.abs(t.amt-c.amt) > c.amt*MATCH_TOL) continue;
+      if(Math.abs(raw-c.amt) > c.amt*MATCH_TOL) continue;
       c.outcome='matched'; c.merchant=t.name||''; c.txKey=key;
       taken.add(key); changed=true; break;
     }
@@ -998,13 +1034,18 @@ function riseupToday(){
 // offer.
 function dupState(){
   const ym=ymNow(), dom=new Date().getDate();
-  const mine=manualData.filter(e=>e.ym===ym && e.d===dom);
+  // Stand-ins only. An entry someone else paid for has no charge coming to duplicate it,
+  // so warning that it "may now appear twice" would be warning about nothing.
+  const mine=manualData.filter(e=>e.ym===ym && e.d===dom && e.standin!==false);
   if(mine.length===0) return null;
   const now=riseupToday();
   const since=Math.max(...mine.map(e=>e.base||0));
   const floor=dupSeen?Math.max(since,dupSeen.at):since;
   const arrived=now-floor;
-  return arrived>0 ? {arrived,count:mine.length,at:now} : null;
+  // A stand-in marked as shared has a full-price charge landing against a half-price
+  // entry, and nothing carries the split across for you. Say which one to mark.
+  const shared=mine.filter(e=>e.share===0.5).map(e=>e.desc).filter(Boolean);
+  return arrived>0 ? {arrived,count:mine.length,at:now,shared} : null;
 }
 
 function calc(){
@@ -1018,10 +1059,18 @@ function calc(){
   // again through the ceiling recomputed over the remaining days.
   const ym=ymNow();
   const manualToday=manualData.filter(e=>e.ym===ym && e.d===dom);
+  // Money someone else charged you for. No RiseUp charge is coming to replace it, so it
+  // is not a stand-in for anything — it is spending, and it counts everywhere spending
+  // counts: the month, the tiers, the average, the forecast.
+  const settled=manualData.filter(e=>e.ym===ym && e.standin===false);
 
   const allToday=fileData.filter(x=>x.d===dom).map(x=>({name:x.name,amt:x.amt,kind:x.kind||'daily',
                                     d:x.d, full:(x.amt0!=null?x.amt0:x.amt), split:isSplit(x)}));
-  for(const e of manualToday) allToday.push({name:e.desc||'הוצאה',amt:e.amt,manual:true,id:e.id,kind:'daily'});
+  // A wheel entry carries its own split, because chargeKey() needs a merchant name and a
+  // manual entry has only free text, usually empty.
+  for(const e of manualToday) allToday.push({name:e.desc||'הוצאה',amt:manualAmt(e),manual:true,id:e.id,
+                                    kind:'daily', standin:e.standin!==false,
+                                    full:e.amt, split:e.share===0.5});
 
   // Only the daily tier is measured against the daily number. A committed charge that
   // lands today was reserved months ago, and counting it here wiped out whichever day it
@@ -1029,7 +1078,8 @@ function calc(){
   // today's list still shows every charge, each with the pot it came from.
   const spentToday=allToday.filter(x=>inDaily(x.kind)).reduce((s,x)=>s+x.amt,0);
   const otherToday=allToday.filter(x=>!inDaily(x.kind)).reduce((s,x)=>s+x.amt,0);
-  const spentMonth=fileData.reduce((s,x)=>s+x.amt,0);
+  const settledSum=settled.reduce((s,e)=>s+manualAmt(e),0);
+  const spentMonth=fileData.reduce((s,x)=>s+x.amt,0)+settledSum;
   const daysLeft=daysInMonth-dom;
 
   // What each tier has actually cost so far this month. RiseUp only: a provisional entry
@@ -1038,6 +1088,7 @@ function calc(){
   // pool it just shrank.
   const tiers={committed:0,big:0,daily:0};
   for(const x of fileData) tiers[x.kind||'daily']+=x.amt;
+  for(const e of settled) tiers.daily+=manualAmt(e);
 
   // One budget, one place it comes from. With history, the derived figures are the
   // measurement of what this costs today and the goal is the amount to come off it —
@@ -1063,9 +1114,13 @@ function calc(){
   // holds still while the day is spent. Dividing a pool that today has already been taken
   // out of by a day count that still includes today charged today twice, and the ceiling
   // sank under its own spending: buy lunch and the number lunch is measured against drops.
+  // Settled entries dated today are inside tiers.daily, so they have to be named here too.
+  // Otherwise the pool is reduced by them while spentToday charges them again, and the
+  // ceiling sinks under today's own spending — the same double count fixed for charges.
   const spentDailyToday = fileData
     .filter(x=>x.d===dom && inDaily(x.kind))
-    .reduce((s,x)=>s+x.amt,0);
+    .reduce((s,x)=>s+x.amt,0)
+    + settled.filter(e=>e.d===dom).reduce((s,e)=>s+manualAmt(e),0);
   const poolPrior = dailyBudget-(spentDaily-spentDailyToday);
   const dynamicCeiling=Math.min(target,Math.max(0,poolPrior/daysToCover));
   const remaining=dynamicCeiling-spentToday;
@@ -1129,7 +1184,10 @@ function render(animate){
     // A charge that isn't measured against today says so, or the list and the headline
     // above it look like they disagree.
     ? c.allToday.map(x=>`<div class="row${x.manual?'':' tap'}"${x.manual?'':` data-merchant="${esc(x.name||'')}" data-day="${x.d!=null?x.d:''}" data-amt="${Math.round(x.full!=null?x.full:x.amt)}"`}>${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${
-        x.manual ? '<span class="sub">רישום זמני</span>'
+        // "רישום זמני" is a promise that a real charge will replace this. It is only true
+        // of a stand-in; an entry someone else paid for is the final word on that money.
+        x.manual ? `<span class="sub">${x.standin?'רישום זמני':'מישהו אחר שילם'}${
+          x.split?' · מתחלק, חצי מ-'+fmt(x.full):''}</span>`
       : inDaily(x.kind) ? (x.split?`<span class="sub">מתחלק · חצי מ-${fmt(x.full)}</span>`:'')
       : `<span class="sub">${TIER_WORD[x.kind]} · לא מהכסף היומי${x.split?' · מתחלק':''}</span>`
       }</span><span class="val neg num${inDaily(x.kind)?'':' muted'}">-${fmt(x.amt)}</span></div>`).join('')
@@ -1141,7 +1199,14 @@ function render(animate){
   // the line wraps there.
   if(dup) $('dupText').innerHTML='רייזאפ עדכן חיובים של היום — <b>'+fmt(dup.arrived)+'</b><br>'
     + '<span style="opacity:.85">'+(dup.count===1?'הרישום הזמני שרשמת עלול':'הרישומים הזמניים שרשמת עלולים')
-    + ' להופיע עכשיו פעמיים.</span>';
+    + ' להופיע עכשיו פעמיים.</span>'
+    // Nothing carries a split across to the charge that lands: matching by amount is
+    // exactly what fails here, and halving a charge that was never shared is worse than
+    // asking. So it asks, and names the one to mark.
+    + (dup.shared && dup.shared.length
+        ? '<br><span style="opacity:.85">סימנת את <b>'+esc(dup.shared.join(', '))
+          + '</b> כמתחלק. סמן גם את החיוב שנקלט.</span>'
+        : '');
 
   $('monthSpent').textContent=fmt(c.spentMonth);
 
@@ -1644,9 +1709,13 @@ function paintWheel(){
   });
   const v=wheelValue(), c=calc(), box=$('padLeft'), verdict=$('padVerdict');
   $('padSave').disabled = v<=0;
+  // What the purchase costs is v; what it costs *you* is what the budget feels. Every
+  // line below the wheel answers "and then what happens to my money", so it reads mine.
+  const mine=v*padShare;
 
-  // Two buttons only once the amount is a decision. Below the threshold a purchase is a
-  // reflex, and it's weighed against the day it lands on rather than against the month.
+  // Two buttons only once the amount is a decision, and that is judged on the price of the
+  // thing, not on your share of it: a ₪400 purchase is a decision even when split. Below
+  // the threshold a purchase is a reflex, weighed against the day it lands on.
   const twoWay = v>=CHECK_MIN;
   $('padSkip').classList.toggle('hidden',!twoWay);
   $('padPricey').classList.toggle('hidden',!twoWay);
@@ -1656,7 +1725,7 @@ function paintWheel(){
   // interpretation themselves, and both are the app's job.
   if(!twoWay){
     verdict.classList.add('hidden');
-    const left=Math.round(c.remaining-v);
+    const left=Math.round(c.remaining-mine);
     box.classList.toggle('over',left<0);
     box.innerHTML = v>0
       ? (left>=0?`אם תקנה את זה יישארו לך <b>${fmt(left)}</b> להיום`
@@ -1665,12 +1734,12 @@ function paintWheel(){
     return;
   }
 
-  const {bigLeft,fromDaily,after,perDay,verdict:vd} = checkMaths(v,c);
+  const {bigLeft,fromDaily,after,perDay,verdict:vd} = checkMaths(mine,c);
 
   // The one thing worth saying before the verdict, and only when it's true: a purchase big
   // enough to come out of the big-purchase pot doesn't hit the daily money the way its
   // size suggests, and the verdict alone can't explain why.
-  const split = bigLeft>0 && v>=BIG_MIN;
+  const split = bigLeft>0 && mine>=BIG_MIN;
   box.classList.remove('over');
   box.innerHTML = !split ? ''
     : fromDaily<=0
@@ -1729,12 +1798,21 @@ $('wheelScroll').addEventListener('click',e=>{
   el.scrollIntoView({block:'center',behavior:'smooth'});
 });
 
+// Both selectors reset with the sheet. Carrying "someone else paid" over from the last
+// purchase would silently mis-file the next one, and this is money.
+let padStandin=true, padShare=1;
+function setOpt(rowId,pred){
+  [...document.getElementById(rowId).children].forEach(b=>b.classList.toggle('on',pred(b)));
+}
 function openPad(){
   $('padTitle').textContent='כמה עומדת לעלות הקנייה?';
   $('padSave').textContent='קניתי';
   $('padSkip').classList.add('hidden');
   $('padPricey').classList.add('hidden');
   $('padDesc').value='';
+  padStandin=true; padShare=1;
+  setOpt('padWho',b=>b.dataset.standin==='1');
+  setOpt('padShare',b=>b.dataset.share==='1');
   wheelIndex=0;
   $('wheelScroll').scrollTop=0;
   paintWheel();
@@ -1755,6 +1833,17 @@ function closePad(answered){
 $('openPad').addEventListener('click',()=>openPad());
 // Wrapped, not passed directly: the click event would arrive as the `answered` argument
 // and every dismissal would look like a decision.
+$('padWho').addEventListener('click',e=>{
+  const b=e.target.closest('.opt'); if(!b) return;
+  padStandin = b.dataset.standin==='1';
+  setOpt('padWho',x=>x===b);
+});
+$('padShare').addEventListener('click',e=>{
+  const b=e.target.closest('.opt'); if(!b) return;
+  padShare = parseFloat(b.dataset.share);
+  setOpt('padShare',x=>x===b);
+  paintWheel();   // the verdict is about your money, and half of it just stopped being yours
+});
 $('padScrim').addEventListener('click',()=>closePad());
 $('padCancel').addEventListener('click',()=>closePad());
 
@@ -1763,7 +1852,10 @@ $('padSave').addEventListener('click',()=>{
   if(v<=0) return;
   const n=new Date();
   if(v>=CHECK_MIN) recordCheck(v,'bought');
-  manualData.push({id:Date.now(),amt:v,desc:$('padDesc').value.trim(),ym:ymNow(),d:n.getDate(),base:riseupToday()});
+  // amt is what the purchase cost. standin says whether a charge is coming to replace
+  // this entry, and share says how much of it is this household's.
+  manualData.push({id:Date.now(),amt:v,desc:$('padDesc').value.trim(),ym:ymNow(),d:n.getDate(),
+                   base:riseupToday(),standin:padStandin,share:padShare});
   closePad(true); save(); render(true); toast('נרשם '+fmt(v));
 });
 
