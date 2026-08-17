@@ -230,6 +230,19 @@
     padding:14px; font-size:16px; font-family:inherit; color:var(--ink); margin:16px 0 12px;
     box-shadow:0 1px 3px rgba(24,28,50,.07); }
   .pad-desc:focus{ outline:none; border-color:var(--blue); }
+  /* Closed it reads as one line of state; open it is the same two rows as before. */
+  .pad-fold{ width:100%; display:flex; align-items:center; gap:10px; border:none;
+    border-radius:12px; background:var(--card); color:var(--ink-2); padding:12px 14px;
+    font-size:14px; font-family:inherit; margin-bottom:10px;
+    box-shadow:0 1px 3px rgba(24,28,50,.07); }
+  .pad-fold .lbl{ font-weight:600; color:var(--ink); }
+  .pad-fold .sum{ flex:1; min-width:0; text-align:left; color:var(--ink-3);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pad-fold .chev{ color:var(--ink-3); transition:transform .15s; }
+  .pad-fold[aria-expanded="true"] .chev{ transform:rotate(-90deg); }
+  /* Anything other than the default has to be visible without opening it. */
+  .pad-fold.set{ background:var(--blue-soft); }
+  .pad-fold.set .sum{ color:var(--blue); font-weight:600; }
   .pad-opts{ display:flex; flex-direction:column; gap:8px; margin-bottom:14px; }
   .opt-row{ display:flex; gap:8px; }
   .opt{ flex:1; min-width:0; border:none; border-radius:12px; background:var(--card);
@@ -475,8 +488,15 @@
   <div class="pricey hidden" id="padPricey">קנייה יקרה</div>
   <input class="pad-desc" id="padDesc" placeholder="על מה? (לא חובה)" autocomplete="off">
   <!-- Two facts the app cannot infer and gets wrong in both directions without asking:
-       whether a charge is coming to replace this entry, and whose money it was. -->
-  <div class="pad-opts">
+       whether a charge is coming to replace this entry, and whose money it was. Folded
+       away because the default answer is right almost every time, and four buttons
+       standing open push the thing you came here to press off the screen. -->
+  <button class="pad-fold" id="padFold" aria-expanded="false">
+    <span class="lbl">חלוקה</span>
+    <span class="sum" id="padFoldSum">הכל שלי</span>
+    <span class="chev">›</span>
+  </button>
+  <div class="pad-opts hidden" id="padOpts">
     <div class="opt-row" id="padWho">
       <button class="opt on" data-standin="1">שילמתי בכרטיס</button>
       <button class="opt" data-standin="0">מישהו אחר שילם</button>
@@ -1144,7 +1164,7 @@ function calc(){
     : avg*daysInMonth;
   const projectedDiff=totalBudget-projected;
 
-  return {now,m,dom,daysInMonth,remaining,spentToday,otherToday,spentMonth,allToday,avg,daysLeft,
+  return {now,m,dom,daysInMonth,remaining,spentToday,otherToday,spentMonth,allToday,avg,daysLeft,settled,
           dynamicCeiling,projected,projectedDiff,totalBudget,target,tiers,daysToCover,
           dailyBudget,reserved,spentDaily,spentDailyPrior:spentDaily-spentDailyToday,poolPrior,
           manualSum:manualToday.reduce((s,e)=>s+e.amt,0)};
@@ -1294,6 +1314,13 @@ function renderMath(c){
   row('כבר בזבזת עד אתמול',fmt(c.spentDailyPrior),
       oneOffs.length ? 'מזה '+fmt(oneOffSum)+' ב-'+oneOffs.length
         +(oneOffs.length===1?' קנייה בודדת':' קניות בודדות')+' מעל '+fmt(ONEOFF_MIN) : '');
+  // The budget was derived from RiseUp history alone, so money someone else charged you
+  // for was never in the baseline it was measured against — it only ever showed up as
+  // spending. Stated here, because otherwise the month reads as an overrun for no visible
+  // reason and the two numbers can never be reconciled by looking at them.
+  const settledSum=c.settled.reduce((s,e)=>s+manualAmt(e),0);
+  if(settledSum>0) row('מזה שילמת למישהו אחר',fmt(settledSum),
+    derived?'לא היה בהיסטוריה שממנה נגזר התקציב, כי זה לא עבר בכרטיס שלך':'');
   row('נשאר לבזבז מהיום עד סוף החודש',(c.poolPrior<0?'-':'')+fmt(c.poolPrior),'',c.poolPrior<0?'neg':'');
   row('ימים שנשארו בחודש (כולל היום)',c.daysToCover);
   // The cap is the one line in the table that isn't plain arithmetic, so it says so.
@@ -1324,7 +1351,10 @@ function renderChart(c){
   if(chartDay!==null && (chartDay<from || chartDay>c.dom)) chartDay=null;
   for(let d=from;d<=c.dom;d++){
     const total = d===c.dom ? c.spentToday
-      : fileData.filter(x=>x.d===d && inDaily(x.kind)).reduce((s,x)=>s+x.amt,0);
+      // Settled entries are in the month and in the tiers, so a bar that ignored them
+      // showed a quiet day on a day money left the household.
+      : fileData.filter(x=>x.d===d && inDaily(x.kind)).reduce((s,x)=>s+x.amt,0)
+        + c.settled.filter(e=>e.d===d).reduce((s,e)=>s+manualAmt(e),0);
     days.push({d,total});
   }
 
@@ -1360,7 +1390,11 @@ function renderDayDetail(c){
   const all = chartDay===c.dom
     ? c.allToday.map(x=>({name:x.name,amt:x.amt,manual:x.manual,kind:x.kind,d:x.d,full:x.full,split:x.split}))
     : fileData.filter(x=>x.d===chartDay).map(x=>({name:x.name,amt:x.amt,kind:x.kind,d:x.d,
-                                                  full:(x.amt0!=null?x.amt0:x.amt),split:isSplit(x)}));
+                                                  full:(x.amt0!=null?x.amt0:x.amt),split:isSplit(x)}))
+        // Without these, money someone else paid for on an earlier day counted in the
+        // month while appearing on no screen at all — impossible to check, or to delete.
+        .concat(c.settled.filter(e=>e.d===chartDay).map(e=>({name:e.desc||'הוצאה',amt:manualAmt(e),
+                kind:'daily',d:e.d,full:e.amt,split:e.share===0.5,manual:true,standin:false,id:e.id})));
 
   // The drawer explains its own bar, so it holds what the bar counts. The rest of the day
   // is stated underneath rather than dropped — otherwise a day with a ₪2,000 charge reads
@@ -1383,8 +1417,11 @@ function renderDayDetail(c){
   $('dayRows').innerHTML = items.length
     ? items.map(x=>'<div class="row'+(x.manual?'':' tap')+'"'
         + (x.manual?'':' data-merchant="'+esc(x.name||'')+'" data-day="'+(x.d!=null?x.d:'')+'" data-amt="'+Math.round(x.full!=null?x.full:x.amt)+'"')+'><span class="lbl"><b>'+esc(x.name||'הוצאה')+'</b>'
-        + (x.manual?'<span class="sub">רישום זמני</span>':'<span class="sub">'+filedAs(x.name,x.kind)
-            +(x.split?' · מתחלק, חצי מ-'+fmt(x.full):'')+'</span>')+'</span>'
+        + (x.manual
+            ? '<span class="sub">'+(x.standin===false?'מישהו אחר שילם':'רישום זמני')
+              +(x.split?' · מתחלק, חצי מ-'+fmt(x.full):'')+'</span>'
+            : '<span class="sub">'+filedAs(x.name,x.kind)
+              +(x.split?' · מתחלק, חצי מ-'+fmt(x.full):'')+'</span>')+'</span>'
         + '<span class="val neg num">-'+fmt(x.amt)+'</span></div>').join('')
     : '<div class="blank"><div class="t">לא יצא כסף ביום הזה</div></div>';
 }
@@ -1804,6 +1841,20 @@ let padStandin=true, padShare=1;
 function setOpt(rowId,pred){
   [...document.getElementById(rowId).children].forEach(b=>b.classList.toggle('on',pred(b)));
 }
+
+// The closed row has to say what is currently set, or folding it away would hide a choice
+// that changes how much money the entry costs you.
+function padFoldSum(){
+  const parts=[];
+  parts.push(padShare===0.5?'מתחלק':'הכל שלי');
+  if(!padStandin) parts.push('מישהו אחר שילם');
+  $('padFoldSum').textContent=parts.join(' · ');
+  $('padFold').classList.toggle('set',padShare!==1 || !padStandin);
+}
+function padFoldOpen(open){
+  $('padOpts').classList.toggle('hidden',!open);
+  $('padFold').setAttribute('aria-expanded',open?'true':'false');
+}
 function openPad(){
   $('padTitle').textContent='כמה עומדת לעלות הקנייה?';
   $('padSave').textContent='קניתי';
@@ -1813,6 +1864,7 @@ function openPad(){
   padStandin=true; padShare=1;
   setOpt('padWho',b=>b.dataset.standin==='1');
   setOpt('padShare',b=>b.dataset.share==='1');
+  padFoldSum(); padFoldOpen(false);
   wheelIndex=0;
   $('wheelScroll').scrollTop=0;
   paintWheel();
@@ -1833,15 +1885,19 @@ function closePad(answered){
 $('openPad').addEventListener('click',()=>openPad());
 // Wrapped, not passed directly: the click event would arrive as the `answered` argument
 // and every dismissal would look like a decision.
+$('padFold').addEventListener('click',()=>
+  padFoldOpen($('padOpts').classList.contains('hidden')));
 $('padWho').addEventListener('click',e=>{
   const b=e.target.closest('.opt'); if(!b) return;
   padStandin = b.dataset.standin==='1';
   setOpt('padWho',x=>x===b);
+  padFoldSum();
 });
 $('padShare').addEventListener('click',e=>{
   const b=e.target.closest('.opt'); if(!b) return;
   padShare = parseFloat(b.dataset.share);
   setOpt('padShare',x=>x===b);
+  padFoldSum();
   paintWheel();   // the verdict is about your money, and half of it just stopped being yours
 });
 $('padScrim').addEventListener('click',()=>closePad());
