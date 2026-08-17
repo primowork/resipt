@@ -175,6 +175,12 @@
   /* The two closing buttons sit side by side, same height, only above the threshold. */
   .padrow{ display:flex; gap:10px; align-items:stretch; }
   .padrow .btn{ flex:1; min-width:0; white-space:nowrap; }
+  .split-opt{ position:relative; text-align:center; line-height:1.35; }
+  .split-opt .sub{ display:block; font-size:13px; font-weight:400; color:var(--ink-3); margin-top:3px; }
+  .split-opt.on{ box-shadow:inset 0 0 0 1.5px var(--green); color:#1F6E48; }
+  .split-opt.on::after{ content:"✓"; position:absolute; left:16px; top:50%;
+    transform:translateY(-50%); font-size:17px; font-weight:700; color:var(--green); }
+
   .btn-skip{ background:var(--card); color:#1F6E48; box-shadow:inset 0 0 0 1.5px #1F6E48; }
   .btn-danger{ background:var(--orange-soft); color:#C0491D; }
 
@@ -436,6 +442,12 @@
     <button class="btn btn-ghost tier-opt" data-tier="big">קנייה גדולה<span class="sub">יוצאת מהקופה לקניות גדולות</span></button>
     <button class="btn btn-ghost tier-opt" data-tier="committed">הוצאה קבועה<span class="sub">יוצאת מהכסף ששמור לחשבונות הקבועים</span></button>
   </div>
+  <!-- Splitting is a separate question from which pot the charge belongs to, so it gets
+       its own row rather than a fourth option that would be mutually exclusive with them. -->
+  <div class="tier-group hidden" id="splitGroup">החלוקה</div>
+  <button class="btn btn-ghost split-opt hidden" id="splitBtn">
+    <span id="splitLabel">מתחלק עם אישתי</span><span class="sub" id="splitSub"></span>
+  </button>
   <button class="btn btn-ghost" id="tierClose" style="margin-top:18px">ביטול</button>
 </div>
 
@@ -576,6 +588,8 @@ let dupSeen = null;
 let savingsGoal = null;
 // {merchant: 'committed'|'big'|'daily'} — a manual answer that beats the automatic tier.
 let overrides = {};
+// Charges shared with someone else, counted at half. Keyed by chargeKey().
+let splits = {};
 // The last sync failure, held until a sync succeeds. Declared with the rest of the state
 // because syncFromApi is defined above the status block and writes to it.
 let syncError = null;
@@ -601,6 +615,7 @@ function save(){ try{
   localStorage.setItem('dupSeen',dupSeen?JSON.stringify(dupSeen):'');
   localStorage.setItem('savingsGoal',savingsGoal!=null?String(savingsGoal):'');
   localStorage.setItem('overrides',JSON.stringify(overrides));
+  localStorage.setItem('splits',JSON.stringify(splits));
   localStorage.setItem('checks',JSON.stringify(checks));
 }catch(e){} }
 function load(){ try{
@@ -620,6 +635,7 @@ function load(){ try{
   const ds=localStorage.getItem('dupSeen'); if(ds) dupSeen=JSON.parse(ds);
   const sg=localStorage.getItem('savingsGoal'); if(sg) savingsGoal=parseFloat(sg)||null;
   const ov=localStorage.getItem('overrides'); if(ov) overrides=JSON.parse(ov)||{};
+  const sp=localStorage.getItem('splits'); if(sp) splits=JSON.parse(sp)||{};
   const ck=localStorage.getItem('checks'); if(ck) checks=JSON.parse(ck);
   // The tally is monthly, like everything else on that card.
   checks=checks.filter(c=>c.ym===ym);
@@ -643,9 +659,23 @@ function load(){ try{
 function retier(){
   for(const x of fileData){
     if(x.kind0==null) x.kind0 = x.kind || (x.amt>=BIG_MIN?'big':'daily');
+    if(x.amt0==null) x.amt0 = x.amt;   // stored before the raw amount was kept
     x.kind = tierOverride(x.name) || x.kind0;
+    // Half of a shared purchase is someone else's money, so the household's own figures
+    // should never have counted it. Applied here, every consumer downstream — today, the
+    // month, the tiers, the chart, the forecast — sees the halved amount without knowing
+    // anything about splitting.
+    x.amt = isSplit(x) ? x.amt0/2 : x.amt0;
   }
 }
+
+// A split belongs to one charge, not to a merchant: the supermarket run shared this week
+// is the same shop as next week's, which isn't. Keyed on what identifies a charge in the
+// month, so a re-sync recognises it again.
+function chargeKey(x){
+  return (x && x.name ? String(x.name).trim() : '') + '|' + (x?x.d:0) + '|' + Math.round(x?(x.amt0!=null?x.amt0:x.amt):0);
+}
+function isSplit(x){ return !!splits[chargeKey(x)]; }
 
 /* ---------------- CSV (fallback) ---------------- */
 function parseCSV(text){
@@ -730,7 +760,9 @@ function mapApiTransactions(list){
     // kind0 is what RiseUp's own fields say, kept so lifting an override restores it
     // instead of leaving the charge stranded wherever the override put it.
     const name=t.businessName||'';
-    out.push({name, amt, d, kind0:baseTier(t,amt), kind:tierOf(t,amt,name)});
+    // amt0 is what the card was charged; amt is what this household actually pays, which
+    // differs whenever a purchase is split. Every figure in the app reads amt.
+    out.push({name, amt0:amt, amt, d, kind0:baseTier(t,amt), kind:tierOf(t,amt,name)});
   }
   return out;
 }
@@ -861,6 +893,7 @@ async function syncFromApi(silent){
 
     const data=await res.json();
     fileData=mapApiTransactions(data && data.transactions);
+    retier();          // re-applies the splits: mapping returns the raw charged amounts
     reconcileChecks();
     lastSync=Date.now(); syncError=null;
     save(); render(true);
@@ -986,7 +1019,8 @@ function calc(){
   const ym=ymNow();
   const manualToday=manualData.filter(e=>e.ym===ym && e.d===dom);
 
-  const allToday=fileData.filter(x=>x.d===dom).map(x=>({name:x.name,amt:x.amt,kind:x.kind||'daily'}));
+  const allToday=fileData.filter(x=>x.d===dom).map(x=>({name:x.name,amt:x.amt,kind:x.kind||'daily',
+                                    d:x.d, full:(x.amt0!=null?x.amt0:x.amt), split:isSplit(x)}));
   for(const e of manualToday) allToday.push({name:e.desc||'הוצאה',amt:e.amt,manual:true,id:e.id,kind:'daily'});
 
   // Only the daily tier is measured against the daily number. A committed charge that
@@ -1094,10 +1128,10 @@ function render(animate){
   list.innerHTML = c.allToday.length>0
     // A charge that isn't measured against today says so, or the list and the headline
     // above it look like they disagree.
-    ? c.allToday.map(x=>`<div class="row${x.manual?'':' tap'}"${x.manual?'':` data-merchant="${esc(x.name||'')}"`}>${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${
+    ? c.allToday.map(x=>`<div class="row${x.manual?'':' tap'}"${x.manual?'':` data-merchant="${esc(x.name||'')}" data-day="${x.d!=null?x.d:''}" data-amt="${Math.round(x.full!=null?x.full:x.amt)}"`}>${x.manual?`<button class="del" data-id="${x.id}" aria-label="מחיקה">✕</button>`:''}<span class="lbl"><b>${esc(x.name||'הוצאה')}</b>${
         x.manual ? '<span class="sub">רישום זמני</span>'
-      : inDaily(x.kind) ? ''
-      : `<span class="sub">${TIER_WORD[x.kind]} · לא מהכסף היומי</span>`
+      : inDaily(x.kind) ? (x.split?`<span class="sub">מתחלק · חצי מ-${fmt(x.full)}</span>`:'')
+      : `<span class="sub">${TIER_WORD[x.kind]} · לא מהכסף היומי${x.split?' · מתחלק':''}</span>`
       }</span><span class="val neg num${inDaily(x.kind)?'':' muted'}">-${fmt(x.amt)}</span></div>`).join('')
     : '<div class="blank"><div class="t">עוד לא נרשמה הוצאה היום</div></div>';
 
@@ -1259,8 +1293,9 @@ function renderDayDetail(c){
   if(chartDay===null) return;
 
   const all = chartDay===c.dom
-    ? c.allToday.map(x=>({name:x.name,amt:x.amt,manual:x.manual,kind:x.kind}))
-    : fileData.filter(x=>x.d===chartDay).map(x=>({name:x.name,amt:x.amt,kind:x.kind}));
+    ? c.allToday.map(x=>({name:x.name,amt:x.amt,manual:x.manual,kind:x.kind,d:x.d,full:x.full,split:x.split}))
+    : fileData.filter(x=>x.d===chartDay).map(x=>({name:x.name,amt:x.amt,kind:x.kind,d:x.d,
+                                                  full:(x.amt0!=null?x.amt0:x.amt),split:isSplit(x)}));
 
   // The drawer explains its own bar, so it holds what the bar counts. The rest of the day
   // is stated underneath rather than dropped — otherwise a day with a ₪2,000 charge reads
@@ -1282,8 +1317,9 @@ function renderDayDetail(c){
   // examined: it is the moment someone notices the ₪370 that shouldn't be daily money.
   $('dayRows').innerHTML = items.length
     ? items.map(x=>'<div class="row'+(x.manual?'':' tap')+'"'
-        + (x.manual?'':' data-merchant="'+esc(x.name||'')+'"')+'><span class="lbl"><b>'+esc(x.name||'הוצאה')+'</b>'
-        + (x.manual?'<span class="sub">רישום זמני</span>':'<span class="sub">'+filedAs(x.name,x.kind)+'</span>')+'</span>'
+        + (x.manual?'':' data-merchant="'+esc(x.name||'')+'" data-day="'+(x.d!=null?x.d:'')+'" data-amt="'+Math.round(x.full!=null?x.full:x.amt)+'"')+'><span class="lbl"><b>'+esc(x.name||'הוצאה')+'</b>'
+        + (x.manual?'<span class="sub">רישום זמני</span>':'<span class="sub">'+filedAs(x.name,x.kind)
+            +(x.split?' · מתחלק, חצי מ-'+fmt(x.full):'')+'</span>')+'</span>'
         + '<span class="val neg num">-'+fmt(x.amt)+'</span></div>').join('')
     : '<div class="blank"><div class="t">לא יצא כסף ביום הזה</div></div>';
 }
@@ -1301,7 +1337,9 @@ function closeDay(){
 
 function renderInvestigation(){
   const panel=$('investigatePanel');
-  const all=fileData.map(x=>({name:x.name||'ללא שם',amt:x.amt,day:x.d,kind:x.kind||'daily'}));
+  // full and split ride along so a row can identify its own charge and say it's halved.
+  const all=fileData.map(x=>({name:x.name||'ללא שם',amt:x.amt,day:x.d,kind:x.kind||'daily',
+                              full:(x.amt0!=null?x.amt0:x.amt),split:isSplit(x)}));
   if(all.length===0){ panel.innerHTML=''; panel.classList.add('hidden'); return; }
 
   const top=[...all].sort((a,b)=>b.amt-a.amt).slice(0,6);
@@ -1318,7 +1356,7 @@ function renderInvestigation(){
   // day: the day of the purchase, or 0 for a charge carried into this cashflow month
   // from an earlier purchase.
   const when = d => d>0 ? d+' ב'+MONTHS[new Date().getMonth()] : 'חיוב מקנייה קודמת';
-  html+=top.map(x=>`<div class="row tap" data-merchant="${esc(x.name)}"><span class="lbl"><b>${esc(x.name)}</b><span class="sub">${when(x.day)} · ${filedAs(x.name,x.kind)}</span></span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
+  html+=top.map(x=>`<div class="row tap" data-merchant="${esc(x.name)}" data-day="${x.day}" data-amt="${Math.round(x.full!=null?x.full:x.amt)}"><span class="lbl"><b>${esc(x.name)}</b><span class="sub">${when(x.day)} · ${filedAs(x.name,x.kind)}${x.split?' · מתחלק':''}</span></span><span class="val neg num">-${fmt(x.amt)}</span></div>`).join('');
   if(grouped.length){
     html+='<div class="head-line" style="margin:22px 0 6px"><div class="card-t" style="font-size:17px">חוזר על עצמו</div></div>';
     html+=grouped.map(g=>`<div class="row tap" data-merchant="${esc(g.name)}"><span class="lbl"><b>${esc(g.name)}</b><span class="sub">${g.count} פעמים החודש · ${filedAs(g.name)}</span></span><span class="val neg num">-${fmt(g.total)}</span></div>`).join('');
@@ -1329,6 +1367,7 @@ function renderInvestigation(){
 
 /* ---------------- re-filing a merchant ---------------- */
 let tierTarget=null;
+let splitTarget=null;   // the one charge the split question is about, null when unanswerable
 const TIER_WORD={committed:'קבועה',big:'קנייה גדולה',daily:'יומית'};
 
 // Which pot a charge sits in belongs on the row, wherever the row is shown: it is the
@@ -1343,18 +1382,53 @@ function filedAs(name,kind){
   return TIER_WORD[kind || (x?(x.kind||'daily'):'daily')]+(tierOverride(k)?' · שינית':'');
 }
 
-function openTier(name){
+function openTier(name,day,amt){
   const k=(name||'').trim(); if(!k) return;
   tierTarget=k;
   $('tierName').textContent=k;
   const x=fileData.find(y=>(y.name||'').trim()===k);
   const now=tierOverride(k) || (x?(x.kind||'daily'):'daily');
   document.querySelectorAll('.tier-opt').forEach(b=>b.classList.toggle('on',b.dataset.tier===now));
+
+  // The tier is a merchant-wide rule; the split is one charge. A row that stands for
+  // several charges at once (the "repeats" list) can't answer it, so it isn't asked.
+  splitTarget = (day!=null && amt!=null)
+    ? fileData.find(y=>(y.name||'').trim()===k && y.d===+day && Math.round(y.amt0!=null?y.amt0:y.amt)===Math.round(+amt))
+    : null;
+  paintSplit();
   $('tierScrim').classList.add('open'); $('tierSheet').classList.add('open');
 }
+
+function paintSplit(){
+  const on = !!splitTarget && isSplit(splitTarget);
+  $('splitGroup').classList.toggle('hidden',!splitTarget);
+  $('splitBtn').classList.toggle('hidden',!splitTarget);
+  if(!splitTarget) return;
+  $('splitBtn').classList.toggle('on',on);
+  const full=splitTarget.amt0!=null?splitTarget.amt0:splitTarget.amt;
+  $('splitSub').textContent = on
+    ? 'נספר '+fmt(full/2)+' מתוך '+fmt(full)+'. לחיצה נוספת מחזירה את הסכום המלא.'
+    : 'החיוב היה '+fmt(full)+'. ייספרו '+fmt(full/2)+', כי החצי השני לא שלך.';
+}
+
 function closeTier(){
-  tierTarget=null;
+  tierTarget=null; splitTarget=null;
   $('tierScrim').classList.remove('open'); $('tierSheet').classList.remove('open');
+}
+
+// Toggled, not set: the same tap undoes it, which is how a two-state answer should behave.
+function toggleSplit(){
+  if(!splitTarget) return;
+  const key=chargeKey(splitTarget), was=!!splits[key];
+  if(was) delete splits[key]; else splits[key]=true;
+  retier();
+  // The derived budget was measured from full charges, so a split makes it stale for the
+  // same reason a re-filing does.
+  history.stale = Object.keys(overrides).length>0 || Object.keys(splits).length>0;
+  // Closed on the way out, like choosing a pot does: the answer is visible in the list
+  // behind the sheet, where the row now carries the halved amount.
+  closeTier(); save(); render(true); historyLine();
+  toast(was ? 'חזר לסכום המלא' : 'נספר חצי');
 }
 
 // Choosing the tier RiseUp already assigned clears the override rather than freezing it:
@@ -1367,7 +1441,7 @@ function setTier(tier){
   retier();
   // The derived budget was measured before this correction, so its tiers still hold the
   // old answer. Rebuilding is six API calls; it is offered, not taken.
-  history.stale = Object.keys(overrides).length>0;
+  history.stale = Object.keys(overrides).length>0 || Object.keys(splits).length>0;
   closeTier(); save(); render(true); historyLine();
   toast(tier==='daily' ? 'חזר להוצאה יומית'
       : tier==='big'   ? 'הועבר לקניות גדולות' : 'הועבר להוצאות קבועות');
@@ -1727,18 +1801,19 @@ $('todayList').addEventListener('click',e=>{
     return;
   }
   const row=e.target.closest('[data-merchant]');
-  if(row) openTier(row.dataset.merchant);
+  if(row) openTier(row.dataset.merchant,row.dataset.day,row.dataset.amt);
 });
 
 // Delegated for the same reason as the chart: the panel is rebuilt through innerHTML.
 $('investigatePanel').addEventListener('click',e=>{
   const row=e.target.closest('[data-merchant]');
-  if(row) openTier(row.dataset.merchant);
+  if(row) openTier(row.dataset.merchant,row.dataset.day,row.dataset.amt);
 });
 $('dayRows').addEventListener('click',e=>{
   const row=e.target.closest('[data-merchant]');
-  if(row) openTier(row.dataset.merchant);
+  if(row) openTier(row.dataset.merchant,row.dataset.day,row.dataset.amt);
 });
+$('splitBtn').addEventListener('click',toggleSplit);
 $('tierScrim').addEventListener('click',closeTier);
 $('tierClose').addEventListener('click',closeTier);
 document.querySelectorAll('.tier-opt').forEach(b=>
