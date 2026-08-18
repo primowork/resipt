@@ -196,6 +196,11 @@
     box-shadow:0 8px 22px -8px rgba(91,108,245,.8); transition:transform .12s; }
   .addbig:active{ transform:scale(.98); }
   .addbig .plus{ font-size:22px; font-weight:500; line-height:1; }
+  .addicon{ flex:none; width:58px; height:58px; border:none; border-radius:18px;
+    background:var(--card); color:var(--blue); display:grid; place-items:center;
+    box-shadow:0 4px 18px -10px rgba(24,28,50,.65); transition:transform .12s; }
+  .addicon:active{ transform:scale(.94); }
+  .addicon svg{ width:24px; height:24px; fill:currentColor; }
   /* Each choice says what it does to the money, so the tiers don't have to be known
      in advance to be chosen between. */
   .tier-opt{ text-align:center; line-height:1.35; }
@@ -332,6 +337,9 @@
   .filebtn{ text-align:center; }
   input[type=file]{ display:none; }
 
+  /* Fires once, over everything, and cannot be tapped through by accident. */
+  .fx{ position:fixed; inset:0; z-index:200; pointer-events:none; }
+
   .toast{ position:fixed; bottom:calc(96px + var(--safe-b)); left:50%; transform:translateX(-50%) translateY(8px);
     background:var(--ink); color:#fff; padding:12px 20px; border-radius:999px; font-size:15px;
     opacity:0; transition:opacity .25s, transform .25s; pointer-events:none; z-index:200; }
@@ -406,6 +414,7 @@
 
   <div class="card hidden" id="decisionsCard">
     <div class="head-line"><div class="card-t">ההחלטות שלך החודש</div></div>
+    <div class="row hidden" id="mealRow"><span class="lbl">הבאת אוכל מהבית<span class="sub" id="mealNote"></span></span><span class="val num pos" id="mealVal"></span></div>
     <div class="row hidden" id="skipRow"><span class="lbl">ויתרת<span class="sub" id="skipNote"></span></span><span class="val num pos" id="skipVal"></span></div>
     <div class="row hidden" id="boughtRow"><span class="lbl">יצא לפועל<span class="sub" id="boughtNote"></span></span><span class="val num" id="boughtVal"></span></div>
     <div class="blank hidden" id="ignoredNote" style="padding:12px 0 2px"><div class="n" id="ignoredText"></div></div>
@@ -416,6 +425,9 @@
 <div class="addbar">
   <div class="addbar-inner">
     <button class="addbig" id="openPad"><span class="plus">+</span><span>קנייה חדשה</span></button>
+    <button class="addicon" id="openMeal" aria-label="הבאתי אוכל מהבית">
+      <svg viewBox="0 0 24 24"><path d="M7 2a1 1 0 0 1 1 1v6a2 2 0 0 1-1 1.73V21a1 1 0 0 1-2 0v-10.27A2 2 0 0 1 4 9V3a1 1 0 0 1 2 0v5h.5V3a1 1 0 0 1 1-1zm10.5 0A1.5 1.5 0 0 1 19 3.5V21a1 1 0 0 1-2 0v-6h-1.5a.5.5 0 0 1-.5-.5V7a5 5 0 0 1 2.5-5"/></svg>
+    </button>
   </div>
 </div>
 
@@ -445,6 +457,21 @@
   <div id="dayRows"></div>
   <p class="lead hidden" id="dayOther" style="margin-top:14px; font-size:14px"></p>
   <button class="btn btn-ghost" id="dayCloseBtn" style="margin-top:18px">סגירה</button>
+</div>
+
+<div class="scrim" id="mealScrim"></div>
+<div class="sheet" id="mealSheet" role="dialog" aria-label="הבאתי אוכל מהבית">
+  <div class="grab"></div>
+  <h3>הבאת אוכל מהבית?</h3>
+  <p class="lead" id="mealLead"></p>
+  <div id="mealRows"></div>
+  <button class="linkbtn hidden" id="mealYearBtn" style="text-align:right"></button>
+  <div id="mealYear" class="hidden"></div>
+  <div class="stack" style="margin-top:18px">
+    <button class="btn btn-primary" id="mealYes">כן, הבאתי</button>
+    <button class="btn btn-ghost hidden" id="mealUndo">בטל את האחרון של היום</button>
+    <button class="btn btn-ghost" id="mealClose">ביטול</button>
+  </div>
 </div>
 
 <div class="scrim" id="tierScrim"></div>
@@ -550,6 +577,14 @@
 
   <hr style="border:none; border-top:1px solid #E4E6EC; margin:22px 0 20px">
 
+  <div class="field">
+    <label for="mealInput">כמה עולה לך צהריים בחוץ?</label>
+    <input type="number" id="mealInput" inputmode="numeric" step="5" min="0" dir="ltr" placeholder="60">
+    <div class="hint">לפי זה נספר כל "הבאתי אוכל מהבית". זו הערכה של מה שהיית מוציא, לא סכום שנמדד, ולכן היא כאן ולא בקוד.</div>
+  </div>
+
+  <hr style="border:none; border-top:1px solid #E4E6EC; margin:22px 0 20px">
+
   <div class="field" style="margin-top:14px">
     <label>תקציב אוטומטי מההיסטוריה</label>
     <div class="hint" id="historyLine">עוד לא נמשכה היסטוריה.</div>
@@ -601,6 +636,7 @@
   <p class="lead hidden" id="versionLine" style="margin-top:14px; text-align:center; font-size:13px"></p>
 </div>
 
+<canvas class="fx hidden" id="fx"></canvas>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -638,6 +674,13 @@ let syncError = null;
 // what someone was about to do with their money before they did it.
 let checks = [];
 
+// One record per meal brought from home. It is a tally and nothing more: see MEAL_VALUE.
+let meals = [];
+// What a lunch out would have cost. An assumption rather than an observation — the wheel
+// never saw this number — so it is a setting, not a constant.
+const MEAL_DEFAULT = 60;
+let mealValue = MEAL_DEFAULT;
+
 const $ = id => document.getElementById(id);
 function fmt(n){ return '₪'+Math.abs(Math.round(n)).toLocaleString('en-US'); }
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -657,6 +700,8 @@ function save(){ try{
   localStorage.setItem('overrides',JSON.stringify(overrides));
   localStorage.setItem('splits',JSON.stringify(splits));
   localStorage.setItem('checks',JSON.stringify(checks));
+  localStorage.setItem('meals',JSON.stringify(meals));
+  localStorage.setItem('mealValue',String(mealValue));
 }catch(e){} }
 function load(){ try{
   const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m);
@@ -685,6 +730,13 @@ function load(){ try{
   const ck=localStorage.getItem('checks'); if(ck) checks=JSON.parse(ck);
   // The tally is monthly, like everything else on that card.
   checks=checks.filter(c=>c.ym===ym);
+  const ml=localStorage.getItem('meals'); if(ml) meals=JSON.parse(ml)||[];
+  // Every month is kept, unlike checks: the record to beat and the yearly total are both
+  // questions about months that are already over. Two years is the horizon — enough for a
+  // full year plus the one being compared against, and small enough to be free.
+  const keepFrom=ymShift(-24);
+  meals=meals.filter(m=>m.ym && m.ym>=keepFrom);
+  const mv=localStorage.getItem('mealValue'); if(mv) mealValue=parseFloat(mv)||MEAL_DEFAULT;
   // A budget typed under the old field while a derived one was active used to be ignored
   // by the daily number. It was still a real instruction — carry it over as the goal it
   // was asking for rather than dropping it.
@@ -1247,7 +1299,17 @@ function render(animate){
   } else gr.classList.add('hidden');
 
   const t=checkTally(), dc=$('decisionsCard');
-  dc.classList.toggle('hidden',checks.length===0);
+  const ms=mealStats();
+  dc.classList.toggle('hidden',checks.length===0 && ms.month===0);
+  // A tally, and only a tally. The saving already showed up on its own — no lunch bought
+  // means no lunch charge — so adding it to any figure here would count it twice.
+  const mr=$('mealRow');
+  mr.classList.toggle('hidden',ms.month===0);
+  if(ms.month){
+    $('mealVal').textContent=fmt(ms.month*mealValue);
+    $('mealNote').textContent=ms.month+(ms.month===1?' פעם':' פעמים')
+      + (ms.best ? (ms.month>ms.best ? ' · שיא חדש' : ' · השיא '+ms.best+' ב'+mealMonthName(ms.bestYm)) : '');
+  }
   const sr=$('skipRow'), br=$('boughtRow'), ig=$('ignoredNote');
   sr.classList.toggle('hidden',t.skipped.length===0);
   if(t.skipped.length){
@@ -1467,6 +1529,113 @@ function renderInvestigation(){
   panel.classList.remove('hidden');
 }
 
+/* ---------------- meals brought from home ---------------- */
+// Everything the tally needs, from one pass. `best` deliberately excludes the running
+// month: a record you are currently setting is not a record to beat.
+function mealStats(){
+  const ym=ymNow(), byMonth={};
+  for(const m of meals) byMonth[m.ym]=(byMonth[m.ym]||0)+1;
+  const month=byMonth[ym]||0;
+  let best=0, bestYm=null;
+  for(const k in byMonth) if(k!==ym && byMonth[k]>best){ best=byMonth[k]; bestYm=k; }
+  const year=String(new Date().getFullYear());
+  const months=Object.keys(byMonth).filter(k=>k.slice(0,4)===year).sort();
+  return {
+    month, best, bestYm, byMonth,
+    prev: byMonth[ymShift(-1)]||0,
+    yearCount: months.reduce((n,k)=>n+byMonth[k],0),
+    yearMonths: months.map(k=>({ym:k,count:byMonth[k]})),
+  };
+}
+function mealMonthName(ym){ return MONTHS[parseInt(ym.slice(5,7),10)-1]; }
+
+// Fireworks, hand-rolled: a library for eight seconds of confetti would outweigh the rest
+// of the app. Respects reduced-motion by simply not running.
+function fireworks(){
+  if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cv=$('fx'), ctx=cv.getContext('2d');
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  cv.width=innerWidth*dpr; cv.height=innerHeight*dpr; ctx.scale(dpr,dpr);
+  cv.classList.remove('hidden');
+
+  const COLORS=['#5B6CF5','#F4703A','#2E9E63','#F0B429','#8E7CF8'];
+  const parts=[];
+  const burst=(x,y)=>{
+    for(let i=0;i<46;i++){
+      const a=Math.random()*Math.PI*2, sp=1.6+Math.random()*3.6;
+      parts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,
+                  c:COLORS[(Math.random()*COLORS.length)|0],r:1.6+Math.random()*2.2});
+    }
+  };
+  const t0=performance.now();
+  let next=0, fired=0;
+  (function frame(t){
+    const dt=t-t0;
+    if(dt>next && fired<5){
+      burst(innerWidth*(0.2+Math.random()*0.6), innerHeight*(0.2+Math.random()*0.35));
+      next=dt+260; fired++;
+    }
+    ctx.clearRect(0,0,innerWidth,innerHeight);
+    for(const p of parts){
+      p.x+=p.vx; p.y+=p.vy; p.vy+=0.055; p.vx*=0.992; p.life-=0.011;
+      if(p.life<=0) continue;
+      ctx.globalAlpha=Math.max(0,p.life);
+      ctx.fillStyle=p.c;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    if(parts.some(p=>p.life>0) || fired<5) requestAnimationFrame(frame);
+    else { cv.classList.add('hidden'); ctx.clearRect(0,0,innerWidth,innerHeight); }
+  })(t0);
+}
+
+// The sheet states where the tally stands *before* the tap, so a mis-tap is visible the
+// moment it happens rather than at the end of the month.
+function openMeal(){
+  renderMealSheet();
+  $('mealScrim').classList.add('open'); $('mealSheet').classList.add('open');
+}
+function closeMeal(){
+  $('mealScrim').classList.remove('open'); $('mealSheet').classList.remove('open');
+}
+function mealsToday(){
+  const dom=new Date().getDate(), ym=ymNow();
+  return meals.filter(m=>m.ym===ym && m.d===dom);
+}
+function renderMealSheet(){
+  const today=mealsToday().length, ms=mealStats();
+  $('mealLead').textContent='כל פעם נספרת כ-'+fmt(mealValue)+' שלא יצאו על צהריים.';
+
+  let html='<div class="row"><span class="lbl">החודש</span><span class="val num pos">'
+    + ms.month+(ms.month===1?' פעם · ':' פעמים · ')+fmt(ms.month*mealValue)+'</span></div>'
+    + '<div class="row"><span class="lbl">היום</span><span class="val num">'
+      + today+(today===1?' פעם':' פעמים')+'</span></div>';
+
+  // The record is the whole game, so it is stated as a distance and not as a fact.
+  if(ms.best){
+    const gap=ms.best-ms.month+1;
+    html+='<div class="row"><span class="lbl">השיא לשבירה<span class="sub">'
+      + ms.best+' ב'+mealMonthName(ms.bestYm)+'</span></span><span class="val num">'
+      + (ms.month>ms.best ? 'נשבר' : 'עוד '+gap)+'</span></div>';
+  }
+  $('mealRows').innerHTML=html;
+
+  $('mealUndo').classList.toggle('hidden',today===0);
+  $('mealYearBtn').classList.toggle('hidden',ms.yearCount===0);
+  $('mealYearBtn').textContent='החיסכון של '+new Date().getFullYear()+' ›';
+  $('mealYear').classList.add('hidden');
+}
+
+// Asked for, not pushed: a year's total is a different question from today's lunch.
+function renderMealYear(){
+  const ms=mealStats();
+  $('mealYear').innerHTML=ms.yearMonths.map(x=>
+    '<div class="row"><span class="lbl">'+mealMonthName(x.ym)+'</span><span class="val num">'
+    + x.count+(x.count===1?' פעם · ':' פעמים · ')+fmt(x.count*mealValue)+'</span></div>').join('')
+    + '<div class="row"><span class="lbl"><b>סך הכל השנה</b></span><span class="val num pos"><b>'
+    + fmt(ms.yearCount*mealValue)+'</b></span></div>';
+}
+
 /* ---------------- re-filing a merchant ---------------- */
 let tierTarget=null;
 let splitTarget=null;   // the one charge the split question is about, null when unanswerable
@@ -1644,6 +1813,7 @@ function openSheet(){
   $('budgetField').classList.toggle('hidden',!!derived);
   $('goalInput').value = savingsGoal!=null ? Math.round(savingsGoal) : '';
   goalHint(savingsGoal);
+  $('mealInput').value = Math.round(mealValue);
   $('budgetInput').value = monthlyBudget!=null ? Math.round(monthlyBudget) : '';
   budgetHint(monthlyBudget);
   historyLine();
@@ -1690,6 +1860,15 @@ $('budgetInput').addEventListener('change',()=>{
   monthlyBudget = (isFinite(v)&&v>0) ? v : null;   // blank restores the default rate
   save(); render(true); budgetHint(monthlyBudget);
   toast(monthlyBudget!=null?'התקציב עודכן':'חזרה לתקציב ברירת המחדל');
+});
+
+$('mealInput').addEventListener('change',()=>{
+  const v=parseFloat($('mealInput').value);
+  // Changing it restates every past month too. That is right: the number is an assumption
+  // about lunches, not a record of prices that were actually paid.
+  mealValue=(isFinite(v)&&v>0)?v:MEAL_DEFAULT;
+  save(); render(false);
+  toast('צהריים בחוץ: '+fmt(mealValue));
 });
 
 $('saveCfgBtn').addEventListener('click',()=>{
@@ -1962,6 +2141,38 @@ $('dayRows').addEventListener('click',e=>{
   if(row) openTier(row.dataset.merchant,row.dataset.day,row.dataset.amt);
 });
 $('splitBtn').addEventListener('click',toggleSplit);
+$('openMeal').addEventListener('click',openMeal);
+$('mealScrim').addEventListener('click',closeMeal);
+$('mealClose').addEventListener('click',closeMeal);
+$('mealYearBtn').addEventListener('click',()=>{
+  const y=$('mealYear');
+  if(y.classList.contains('hidden')) renderMealYear();
+  y.classList.toggle('hidden');
+});
+$('mealYes').addEventListener('click',()=>{
+  const before=mealStats();
+  const n=new Date();
+  meals.push({id:Date.now(),ym:ymNow(),d:n.getDate(),ts:Date.now()});
+  const after=mealStats();
+  // The exact tap that passes the record, and only that one. A record already broken
+  // earlier this month has been celebrated; celebrating it again turns it into wallpaper.
+  const broke = before.best>0 && before.month<=before.best && after.month>after.best;
+  closeMeal(); save(); render(false);
+  if(broke){
+    fireworks();
+    toast('שיא חדש! '+after.month+' פעמים החודש · '+fmt(after.month*mealValue));
+  } else {
+    toast('נספר. '+after.month+(after.month===1?' פעם':' פעמים')+' החודש · '+fmt(after.month*mealValue));
+  }
+});
+$('mealUndo').addEventListener('click',()=>{
+  const today=mealsToday();
+  if(!today.length) return;
+  const last=today[today.length-1].id;
+  meals=meals.filter(m=>m.id!==last);
+  save(); render(false); renderMealSheet();
+  toast('בוטל');
+});
 $('tierScrim').addEventListener('click',closeTier);
 $('tierClose').addEventListener('click',closeTier);
 document.querySelectorAll('.tier-opt').forEach(b=>
@@ -1993,7 +2204,7 @@ $('investigateBtn').addEventListener('click',()=>{
 
 $('clearBtn').addEventListener('click',()=>{
   if(!confirm('למחוק את כל הנתונים? אי אפשר לשחזר.')) return;
-  manualData=[]; fileData=[]; lastSync=null; dupSeen=null; checks=[]; save();
+  manualData=[]; fileData=[]; lastSync=null; dupSeen=null; checks=[]; meals=[]; save();
   $('investigatePanel').classList.add('hidden');
   closeSheet(); render(); toast('הכל אופס');
 });
