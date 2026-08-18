@@ -53,7 +53,7 @@ const server = http.createServer(async (req, res) => {
 
   fs.readFile(path.join(__dirname, entry[0]), (err, body) => {
     if (err) return send(res, 404, 'text/plain; charset=utf-8', 'Not found');
-    send(res, 200, entry[1], body, { 'Cache-Control': 'no-cache' });
+    send(res, 200, entry[1], body);
   });
 });
 
@@ -86,8 +86,16 @@ async function relay(req, res, url) {
   send(res, upstream.status, 'application/json; charset=utf-8', body);
 }
 
+// `no-cache` does not mean "don't keep it" — it means "keep it, but revalidate before
+// reuse", and revalidation needs an ETag or Last-Modified that this server never sent.
+// A browser holding a copy it has no way to revalidate serves the copy, which is exactly
+// what iOS Safari did: desktop updated, the phone stayed on an old build for days.
+// `no-store` is the directive that actually forbids keeping it; the rest cover caches
+// that predate it.
+const NO_STORE = 'no-store, no-cache, must-revalidate, max-age=0';
+
 function send(res, status, type, body, extra) {
-  res.writeHead(status, { 'Content-Type': type, ...(extra || {}) });
+  res.writeHead(status, { 'Content-Type': type, 'Cache-Control': NO_STORE, ...(extra || {}) });
   res.end(body);
 }
 

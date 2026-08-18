@@ -340,6 +340,23 @@
   /* Fires once, over everything, and cannot be tapped through by accident. */
   .fx{ position:fixed; inset:0; z-index:200; pointer-events:none; }
 
+  /* Reuses the headline card's type and bar. Progress here is a good thing, so the fill
+     is green rather than the spend bar's yellow. */
+  .meal-hero{ text-align:center; margin:22px 0 4px; }
+  /* .pos is scoped to table rows, and this is not one. */
+  .meal-hero .big{ font-size:clamp(46px, 14vw, 58px); font-weight:700; line-height:1.05;
+    letter-spacing:-2px; color:var(--green); }
+  .meal-hero .big.zero{ color:var(--ink-3); }
+  .meal-count{ font-size:16px; color:var(--ink-2); margin-top:6px; }
+  .bar.good i{ background:var(--green); }
+  #mealRace .legend{ display:flex; justify-content:space-between; font-size:14px;
+    color:var(--ink-3); }
+  #mealRace .legend b{ color:var(--ink); font-weight:600; }
+  /* Retreat, not the reason the sheet opened: they stop competing with the one button. */
+  .meal-links{ display:flex; justify-content:center; gap:22px; margin-top:6px; }
+  .meal-links .linkbtn{ width:auto; padding:12px 0; }
+  #mealYearBtn{ padding-top:4px; }
+
   .toast{ position:fixed; bottom:calc(96px + var(--safe-b)); left:50%; transform:translateX(-50%) translateY(8px);
     background:var(--ink); color:#fff; padding:12px 20px; border-radius:999px; font-size:15px;
     opacity:0; transition:opacity .25s, transform .25s; pointer-events:none; z-index:200; }
@@ -462,16 +479,25 @@
 <div class="scrim" id="mealScrim"></div>
 <div class="sheet" id="mealSheet" role="dialog" aria-label="הבאתי אוכל מהבית">
   <div class="grab"></div>
-  <h3>הבאת אוכל מהבית?</h3>
-  <p class="lead" id="mealLead"></p>
-  <div id="mealRows"></div>
-  <button class="linkbtn hidden" id="mealYearBtn" style="text-align:right"></button>
-  <div id="mealYear" class="hidden"></div>
-  <div class="stack" style="margin-top:18px">
-    <button class="btn btn-primary" id="mealYes">כן, הבאתי</button>
-    <button class="btn btn-ghost hidden" id="mealUndo">בטל את האחרון של היום</button>
-    <button class="btn btn-ghost" id="mealClose">ביטול</button>
+  <h3 style="text-align:center">הבאת אוכל מהבית?</h3>
+  <!-- The money saved is the only thing here worth feeling, so it is the size of the
+       headline on the main screen rather than a value in a table. Every number sits in
+       its own element: "2 פעמים · ₪120" in one cell came out of RTL reordered. -->
+  <div class="meal-hero">
+    <div class="big num pos" id="mealSaved">₪0</div>
+    <div class="meal-count" id="mealCount"></div>
   </div>
+  <div id="mealRace" class="hidden">
+    <div class="bar good"><i id="mealBar"></i></div>
+    <div class="legend"><span id="mealRecord"></span><span id="mealGap"></span></div>
+  </div>
+  <button class="btn btn-primary" id="mealYes" style="margin-top:20px">כן, הבאתי</button>
+  <div class="meal-links">
+    <button class="linkbtn hidden" id="mealUndo">בטל את האחרון</button>
+    <button class="linkbtn" id="mealClose">ביטול</button>
+  </div>
+  <button class="linkbtn hidden" id="mealYearBtn"></button>
+  <div id="mealYear" class="hidden"></div>
 </div>
 
 <div class="scrim" id="tierScrim"></div>
@@ -1603,21 +1629,24 @@ function mealsToday(){
 }
 function renderMealSheet(){
   const today=mealsToday().length, ms=mealStats();
-  $('mealLead').textContent='כל פעם נספרת כ-'+fmt(mealValue)+' שלא יצאו על צהריים.';
 
-  let html='<div class="row"><span class="lbl">החודש</span><span class="val num pos">'
-    + ms.month+(ms.month===1?' פעם · ':' פעמים · ')+fmt(ms.month*mealValue)+'</span></div>'
-    + '<div class="row"><span class="lbl">היום</span><span class="val num">'
-      + today+(today===1?' פעם':' פעמים')+'</span></div>';
+  const saved=$('mealSaved');
+  saved.className='big num'+(ms.month===0?' zero':'');   // nothing saved yet is not a win
+  saved.textContent=fmt(ms.month*mealValue);
+  $('mealCount').textContent = ms.month===0 ? 'עוד לא החודש'
+    : (ms.month===1?'פעם אחת החודש':ms.month+' פעמים החודש');
 
-  // The record is the whole game, so it is stated as a distance and not as a fact.
+  // The record is the whole game, so it is a distance to close and not a row of text.
+  // With no finished month to beat there is nothing to race, and the bar would be
+  // measuring against zero.
+  const race=$('mealRace');
+  race.classList.toggle('hidden',!ms.best);
   if(ms.best){
-    const gap=ms.best-ms.month+1;
-    html+='<div class="row"><span class="lbl">השיא לשבירה<span class="sub">'
-      + ms.best+' ב'+mealMonthName(ms.bestYm)+'</span></span><span class="val num">'
-      + (ms.month>ms.best ? 'נשבר' : 'עוד '+gap)+'</span></div>';
+    const beaten=ms.month>ms.best;
+    $('mealBar').style.width=Math.min(100,(ms.month/(ms.best+1))*100)+'%';
+    $('mealRecord').innerHTML='השיא <b>'+ms.best+'</b> ב'+mealMonthName(ms.bestYm);
+    $('mealGap').innerHTML = beaten ? '<b>שיא חדש</b>' : 'עוד <b>'+(ms.best-ms.month+1)+'</b>';
   }
-  $('mealRows').innerHTML=html;
 
   $('mealUndo').classList.toggle('hidden',today===0);
   $('mealYearBtn').classList.toggle('hidden',ms.yearCount===0);
