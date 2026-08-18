@@ -1544,7 +1544,6 @@ function mealStats(){
     month, best, bestYm, byMonth,
     prev: byMonth[ymShift(-1)]||0,
     yearCount: months.reduce((n,k)=>n+byMonth[k],0),
-    yearMonths: months.map(k=>({ym:k,count:byMonth[k]})),
   };
 }
 function mealMonthName(ym){ return MONTHS[parseInt(ym.slice(5,7),10)-1]; }
@@ -1626,14 +1625,14 @@ function renderMealSheet(){
   $('mealYear').classList.add('hidden');
 }
 
-// Asked for, not pushed: a year's total is a different question from today's lunch.
+// Asked for, not pushed: a year's total is a different question from today's lunch. And
+// it is one number — a month-by-month table answers a question nobody asked, and buries
+// the one that was.
 function renderMealYear(){
   const ms=mealStats();
-  $('mealYear').innerHTML=ms.yearMonths.map(x=>
-    '<div class="row"><span class="lbl">'+mealMonthName(x.ym)+'</span><span class="val num">'
-    + x.count+(x.count===1?' פעם · ':' פעמים · ')+fmt(x.count*mealValue)+'</span></div>').join('')
-    + '<div class="row"><span class="lbl"><b>סך הכל השנה</b></span><span class="val num pos"><b>'
-    + fmt(ms.yearCount*mealValue)+'</b></span></div>';
+  $('mealYear').innerHTML='<div class="row"><span class="lbl"><b>'+new Date().getFullYear()
+    + '</b><span class="sub">'+ms.yearCount+(ms.yearCount===1?' פעם':' פעמים')+'</span></span>'
+    + '<span class="val num pos"><b>'+fmt(ms.yearCount*mealValue)+'</b></span></div>';
 }
 
 /* ---------------- re-filing a merchant ---------------- */
