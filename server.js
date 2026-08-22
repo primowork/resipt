@@ -15,7 +15,9 @@
 
 const http = require('node:http');
 const fs = require('node:fs');
+const fsp = require('node:fs/promises');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const PORT = process.env.PORT || 3000;
 const UPSTREAM = (process.env.RISEUP_API_BASE || 'https://input.riseup.co.il').replace(/\/+$/, '');
@@ -23,6 +25,102 @@ const ENV_PAT = process.env.RISEUP_PAT || '';
 
 // Allowlist, not a pass-through: the token must only ever reach these read endpoints.
 const RELAY_ROUTES = new Set(['transactions', 'budget']);
+
+/* ---------------- state ----------------
+ * localStorage is not a place to keep anything you care about. On iOS it is cleared for
+ * reasons outside anyone's control: ITP drops script-writable storage for a site left
+ * alone for a week, removing a home-screen app removes its store, and a different
+ * hostname is a different store entirely. Months of accumulation vanish unannounced.
+ *
+ * This must be a mounted volume. Railway's default filesystem is ephemeral and is wiped
+ * on every deploy, so a JSON file written to it would reproduce the very bug this exists
+ * to fix — in a place with even less chance of noticing.
+ */
+const STATE_DIR = process.env.STATE_DIR || '';
+const STATE_SALT = process.env.STATE_SALT || '';
+const CODE_MIN = 6;   // the code is the whole of the access control
+
+// Named after a hash of the code, so there is no user table to keep and no account to
+// manage: the code *is* the access. Salted so that listing the directory reveals nothing.
+function stateFile(code) {
+  return path.join(STATE_DIR, crypto.createHash('sha256').update(code + STATE_SALT).digest('hex') + '.json');
+}
+
+// A short code needs a floor under brute force. Per-IP, in memory: a restart clearing it
+// is fine, since a restart also costs the attacker everything they had in flight.
+const attempts = new Map();
+function rateLimited(ip) {
+  const now = Date.now();
+  const hits = (attempts.get(ip) || []).filter((t) => now - t < 60_000);
+  hits.push(now);
+  attempts.set(ip, hits);
+  if (attempts.size > 5000) attempts.clear();   // unbounded growth is its own outage
+  return hits.length > 10;
+}
+
+function codeOf(req) {
+  const code = String(req.headers['x-code'] || '');
+  return code.length >= CODE_MIN ? code : null;   // never logged, anywhere
+}
+
+async function readState(code) {
+  try {
+    return JSON.parse(await fsp.readFile(stateFile(code), 'utf8'));
+  } catch (e) {
+    if (e.code === 'ENOENT') return { rev: 0, state: {} };   // a code nobody has used yet
+    throw e;
+  }
+}
+
+// Written to a temp file and renamed, because a deploy landing mid-write would otherwise
+// leave truncated JSON — which reads back as total data loss.
+async function writeState(code, body) {
+  const file = stateFile(code);
+  const tmp = file + '.' + process.pid + '.tmp';
+  await fsp.writeFile(tmp, JSON.stringify(body));
+  await fsp.rename(tmp, file);
+}
+
+async function handleState(req, res) {
+  const ip = req.socket.remoteAddress || '?';
+  const code = codeOf(req);
+  if (!code) {
+    if (rateLimited(ip)) return json(res, 429, { error: 'too_many' });
+    return json(res, 401, { error: 'bad_code' });
+  }
+
+  if (req.method === 'GET') return json(res, 200, await readState(code));
+
+  if (req.method === 'PUT') {
+    const body = await readJson(req);
+    if (!body || typeof body.state !== 'object' || body.state === null) {
+      return json(res, 400, { error: 'bad_body' });
+    }
+    const current = await readState(code);
+    // Two devices, last-write-wins, would let whichever tab was left open quietly erase
+    // what the other one saved. A stale rev is refused so the client can merge instead.
+    if (Number(body.rev) !== current.rev) {
+      return json(res, 409, { error: 'stale', rev: current.rev, state: current.state });
+    }
+    const next = { rev: current.rev + 1, state: body.state, at: new Date().toISOString() };
+    await writeState(code, next);
+    return json(res, 200, { rev: next.rev });
+  }
+
+  return json(res, 405, { error: 'method_not_allowed' });
+}
+
+function readJson(req) {
+  return new Promise((resolve) => {
+    let raw = '';
+    req.on('data', (c) => {
+      raw += c;
+      if (raw.length > 2_000_000) { req.destroy(); resolve(null); }
+    });
+    req.on('end', () => { try { resolve(JSON.parse(raw)); } catch { resolve(null); } });
+    req.on('error', () => resolve(null));
+  });
+}
 
 const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'],
@@ -47,6 +145,12 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname.startsWith('/api/riseup/')) return relay(req, res, url);
   if (url.pathname === '/api/version') return json(res, 200, VERSION);
+  if (url.pathname === '/api/state') {
+    return handleState(req, res).catch((e) => {
+      console.error('state:', e.message);
+      json(res, 500, { error: 'state_unavailable' });
+    });
+  }
 
   const entry = STATIC[url.pathname];
   if (!entry || req.method !== 'GET') return send(res, 404, 'text/plain; charset=utf-8', 'Not found');
@@ -101,6 +205,25 @@ function send(res, status, type, body, extra) {
 
 function json(res, status, body) {
   send(res, status, 'application/json; charset=utf-8', JSON.stringify(body));
+}
+
+// Refusing to start beats starting without somewhere to save. An app that appears to
+// save and does not is how the same data gets lost a second time, quietly.
+for (const [name, value] of [['STATE_DIR', STATE_DIR], ['STATE_SALT', STATE_SALT]]) {
+  if (!value) {
+    console.error(`resipt: ${name} is not set, so nothing would be saved.\n` +
+      '  Mount a Railway volume (e.g. at /data), then set STATE_DIR to its mount path\n' +
+      '  and STATE_SALT to a long random string. Railway\'s default filesystem is\n' +
+      '  ephemeral and is wiped on every deploy, so a plain directory will not do.');
+    process.exit(1);
+  }
+}
+try {
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  fs.accessSync(STATE_DIR, fs.constants.W_OK);
+} catch (e) {
+  console.error(`resipt: STATE_DIR (${STATE_DIR}) is not writable: ${e.message}`);
+  process.exit(1);
 }
 
 server.listen(PORT, () => {

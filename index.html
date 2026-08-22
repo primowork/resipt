@@ -29,6 +29,11 @@
     --green:#2FA36B;
     --green-soft:#E9F7F0;
     --safe-b:env(safe-area-inset-bottom, 0px);
+    /* viewport-fit=cover hands the page the whole screen, notch included, and
+       apple-mobile-web-app-capable removes Safari's own chrome. The bottom inset was
+       accounted for and the top was not, so on the home screen the greeting, the date,
+       the status chip and the gear all sat under the status bar. */
+    --safe-t:env(safe-area-inset-top, 0px);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; padding:0;}
@@ -51,7 +56,7 @@
   @media (prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important;} }
 
   /* ---------- header ---------- */
-  .top{ display:flex; align-items:center; gap:10px; padding:18px 2px 16px; }
+  .top{ display:flex; align-items:center; gap:10px; padding:calc(18px + var(--safe-t)) 2px 16px; }
   .hello{ flex:1; min-width:0; }
   .hello .h{ font-size:14px; color:var(--ink-3); font-weight:500; }
   .hello .d{ font-size:17px; font-weight:700; letter-spacing:-.3px; margin-top:1px;
@@ -183,6 +188,11 @@
 
   .btn-skip{ background:var(--card); color:#1F6E48; box-shadow:inset 0 0 0 1.5px #1F6E48; }
   .btn-danger{ background:var(--orange-soft); color:#C0491D; }
+
+  /* Quiet unless it has something to say. "נשמר בענן" is not news; "לא נשמר" is. */
+  .sync{ max-width:480px; margin:0 auto 8px; text-align:center; font-size:13px;
+    color:var(--ink-3); }
+  .sync.err{ color:#A8431B; font-weight:600; }
 
   /* ---------- add bar ---------- */
   .addbar{ position:fixed; bottom:0; left:0; right:0; z-index:60;
@@ -442,6 +452,7 @@
 </div>
 
 <div class="addbar">
+  <div class="sync hidden" id="syncLine"></div>
   <div class="addbar-inner">
     <button class="addbig" id="openPad"><span class="plus">+</span><span>קנייה חדשה</span></button>
     <button class="addicon" id="openMeal" aria-label="הבאתי אוכל מהבית">
@@ -664,6 +675,18 @@
   <p class="lead hidden" id="versionLine" style="margin-top:14px; text-align:center; font-size:13px"></p>
 </div>
 
+<div class="scrim" id="codeScrim"></div>
+<div class="sheet" id="codeSheet" role="dialog" aria-label="קוד גישה">
+  <div class="grab"></div>
+  <h3 id="codeTitle">הקוד שלך</h3>
+  <p class="lead" id="codeLead">בחר קוד. הנתונים נשמרים בענן לפיו, וכשהדפדפן ישכח הכל — תקליד אותו שוב והכל יחזור.</p>
+  <div class="field" style="margin-top:16px">
+    <input type="password" id="codeInput" placeholder="לפחות 6 תווים" autocomplete="current-password" spellcheck="false">
+    <div class="hint" id="codeHint"></div>
+  </div>
+  <button class="btn btn-primary" id="codeSave">שמור</button>
+</div>
+
 <canvas class="fx hidden" id="fx"></canvas>
 <div class="toast" id="toast"></div>
 
@@ -730,7 +753,85 @@ function save(){ try{
   localStorage.setItem('checks',JSON.stringify(checks));
   localStorage.setItem('meals',JSON.stringify(meals));
   localStorage.setItem('mealValue',String(mealValue));
-}catch(e){} }
+}catch(e){}
+  pushState();   // localStorage is the mirror; the server is where it survives
+}
+
+/* ---------------- cloud state ----------------
+ * Every key above also lives on the server, and on load the server wins. localStorage
+ * stays as a mirror so the screen paints instantly and the app still works with no
+ * network — but it is no longer the only copy, which is what made an iOS storage sweep
+ * or a reinstalled home-screen app erase months of history with nothing to restore from.
+ */
+const STATE_KEYS = ['manualData','fileData','apiCfg','lastSync','monthlyBudget','history',
+  'derived','offered','dupSeen','savingsGoal','overrides','splits','checks','meals','mealValue'];
+
+let stateCode = null;    // the code, kept in localStorage; re-typing it restores everything
+let stateRev  = 0;
+let syncState = 'off';   // off | saving | saved | error
+
+function snapshot(){
+  const out={};
+  for(const k of STATE_KEYS) out[k]=localStorage.getItem(k);
+  return out;
+}
+
+// Debounced and coalesced: a wheel entry can fire save() several times in a second, and
+// the whole blob is a few kilobytes either way.
+let pushTimer=null, pushAgain=false, pushing=false;
+function pushState(){
+  if(!stateCode) return;
+  if(pushTimer) return;
+  pushTimer=setTimeout(()=>{ pushTimer=null; doPush(); },1000);
+}
+async function doPush(){
+  if(!stateCode) return;
+  if(pushing){ pushAgain=true; return; }
+  pushing=true; setSync('saving');
+  try{
+    const r=await fetch('/api/state',{method:'PUT',
+      headers:{'Content-Type':'application/json','X-Code':stateCode},
+      body:JSON.stringify({rev:stateRev,state:snapshot()})});
+    if(r.status===409){
+      // Another device wrote first. Take theirs rather than overwrite it — losing the
+      // other device's work is the same failure this whole change exists to prevent.
+      const b=await r.json();
+      applyState(b.state); stateRev=b.rev; load(); render(false);
+      setSync('saved');
+    } else if(r.ok){
+      stateRev=(await r.json()).rev; setSync('saved');
+    } else setSync('error');
+  }catch(e){ setSync('error'); }
+  pushing=false;
+  if(pushAgain){ pushAgain=false; pushState(); }
+}
+
+function applyState(state){
+  for(const k of STATE_KEYS){
+    const v=state?state[k]:null;
+    if(v==null) localStorage.removeItem(k); else localStorage.setItem(k,v);
+  }
+}
+
+async function pullState(){
+  if(!stateCode) return false;
+  const r=await fetch('/api/state',{headers:{'X-Code':stateCode}});
+  if(!r.ok) throw new Error(r.status===401?'code':'server');
+  const b=await r.json();
+  stateRev=b.rev;
+  // rev 0 is a code nobody has written under yet. Leaving the mirror alone would make a
+  // typo in the code silently adopt this device's data under the wrong code.
+  applyState(b.state);
+  return true;
+}
+
+function setSync(s){
+  syncState=s;
+  const el=$('syncLine'); if(!el) return;
+  el.classList.toggle('hidden',s==='off');
+  el.className='sync'+(s==='error'?' err':'')+(s==='off'?' hidden':'');
+  el.textContent = s==='saving' ? 'שומר…' : s==='error' ? 'לא נשמר — ננסה שוב' : 'נשמר בענן';
+}
 function load(){ try{
   const m=localStorage.getItem('manualData'); if(m) manualData=JSON.parse(m);
   // A stand-in is a running tally for one day only — RiseUp delivers the real charge
@@ -1493,7 +1594,11 @@ function renderDayDetail(c){
   if(chartDay===null) return;
 
   const all = chartDay===c.dom
-    ? c.allToday.map(x=>({name:x.name,amt:x.amt,manual:x.manual,kind:x.kind,d:x.d,full:x.full,split:x.split}))
+    // standin rides along: without it every manual row here fell back to "רישום זמני",
+    // so money someone else paid read as provisional in the drawer while the list above
+    // it said "מישהו אחר שילם" about the same entry.
+    ? c.allToday.map(x=>({name:x.name,amt:x.amt,manual:x.manual,standin:x.standin,
+                          kind:x.kind,d:x.d,full:x.full,split:x.split}))
     : fileData.filter(x=>x.d===chartDay).map(x=>({name:x.name,amt:x.amt,kind:x.kind,d:x.d,
                                                   full:(x.amt0!=null?x.amt0:x.amt),split:isSplit(x)}))
         // Without these, money someone else paid for on an earlier day counted in the
@@ -2279,17 +2384,64 @@ $('fileInput').addEventListener('change',e=>{
   r.readAsText(file,'UTF-8');
 });
 
+/* ---------------- the code ---------------- */
+function openCode(first){
+  $('codeTitle').textContent = first ? 'הקוד שלך' : 'הקוד לא נכון';
+  $('codeLead').textContent = first
+    ? 'בחר קוד. הנתונים נשמרים בענן לפיו, וכשהדפדפן ישכח הכל — תקליד אותו שוב והכל יחזור.'
+    : 'לא הצלחתי להיכנס עם הקוד הזה. נסה שוב.';
+  $('codeInput').value = first ? '' : (stateCode||'');
+  $('codeHint').textContent='';
+  $('codeScrim').classList.add('open'); $('codeSheet').classList.add('open');
+  setTimeout(()=>$('codeInput').focus(),320);
+}
+function closeCode(){
+  $('codeScrim').classList.remove('open'); $('codeSheet').classList.remove('open');
+}
+$('codeSave').addEventListener('click',async ()=>{
+  const v=$('codeInput').value.trim();
+  if(v.length<6){ $('codeHint').textContent='לפחות 6 תווים.'; return; }
+  stateCode=v;
+  try{
+    await pullState();
+    localStorage.setItem('stateCode',v);
+    closeCode(); load(); render(true); setSync('saved');
+    if(configured() || !apiCfg.base) syncFromApi(true);
+    maybeOfferBudget();
+  }catch(e){
+    stateCode=null;
+    $('codeHint').textContent = e.message==='code' ? 'הקוד לא התקבל.' : 'אין חיבור לשרת. נסה שוב.';
+  }
+});
+$('codeInput').addEventListener('keydown',e=>{ if(e.key==='Enter') $('codeSave').click(); });
+
 /* ---------------- boot ---------------- */
+// The mirror paints first so the screen is never blank, and the server then overwrites
+// it. Without a code nothing is stored anywhere but this device, so the sheet is the
+// first thing shown.
 load();
-save();   // persist the prune of yesterday's entries, don't wait for the next write
 buildWheel();
 render();
-// The same-origin relay may hold the token server-side, so try a sync even with no
-// token pasted here — a 401 comes back with a clear reason either way.
-if(configured() || !apiCfg.base) syncFromApi(true);
-// Also offer at boot: history built in an earlier session would otherwise never surface
-// a recommendation, since backfill() returns early once it has run for the month.
-maybeOfferBudget();
+
+(async ()=>{
+  stateCode = localStorage.getItem('stateCode');
+  if(!stateCode) return openCode(true);
+  try{
+    await pullState();
+    load(); save(); render(true); setSync('saved');
+  }catch(e){
+    if(e.message==='code'){ stateCode=null; return openCode(false); }
+    // Offline: the mirror is what there is, and the status line says so rather than
+    // implying the last few taps are safe somewhere.
+    setSync('error');
+  }
+  // The same-origin relay may hold the token server-side, so try a sync even with no
+  // token pasted here — a 401 comes back with a clear reason either way.
+  if(configured() || !apiCfg.base) syncFromApi(true);
+  // Also offer at boot: history built in an earlier session would otherwise never surface
+  // a recommendation, since backfill() returns early once it has run for the month.
+  maybeOfferBudget();
+})();
 </script>
 </body>
 </html>
