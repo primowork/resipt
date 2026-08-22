@@ -29,6 +29,11 @@
     --green:#2FA36B;
     --green-soft:#E9F7F0;
     --safe-b:env(safe-area-inset-bottom, 0px);
+    /* viewport-fit=cover hands the page the whole screen, notch included, and
+       apple-mobile-web-app-capable removes Safari's own chrome. The bottom inset was
+       accounted for and the top was not, so on the home screen the greeting, the date,
+       the status chip and the gear all sat under the status bar. */
+    --safe-t:env(safe-area-inset-top, 0px);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; padding:0;}
@@ -51,7 +56,7 @@
   @media (prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important;} }
 
   /* ---------- header ---------- */
-  .top{ display:flex; align-items:center; gap:10px; padding:18px 2px 16px; }
+  .top{ display:flex; align-items:center; gap:10px; padding:calc(18px + var(--safe-t)) 2px 16px; }
   .hello{ flex:1; min-width:0; }
   .hello .h{ font-size:14px; color:var(--ink-3); font-weight:500; }
   .hello .d{ font-size:17px; font-weight:700; letter-spacing:-.3px; margin-top:1px;
@@ -1589,7 +1594,11 @@ function renderDayDetail(c){
   if(chartDay===null) return;
 
   const all = chartDay===c.dom
-    ? c.allToday.map(x=>({name:x.name,amt:x.amt,manual:x.manual,kind:x.kind,d:x.d,full:x.full,split:x.split}))
+    // standin rides along: without it every manual row here fell back to "רישום זמני",
+    // so money someone else paid read as provisional in the drawer while the list above
+    // it said "מישהו אחר שילם" about the same entry.
+    ? c.allToday.map(x=>({name:x.name,amt:x.amt,manual:x.manual,standin:x.standin,
+                          kind:x.kind,d:x.d,full:x.full,split:x.split}))
     : fileData.filter(x=>x.d===chartDay).map(x=>({name:x.name,amt:x.amt,kind:x.kind,d:x.d,
                                                   full:(x.amt0!=null?x.amt0:x.amt),split:isSplit(x)}))
         // Without these, money someone else paid for on an earlier day counted in the
