@@ -134,8 +134,18 @@
   /* ---------- 7-day chart ---------- */
   /* The bar track is a fixed height shared by every column and by the goal line, so a
      tall bar can't be squashed by flex and the line can't drift off the same scale. */
+  /* pan-y so the page still scrolls vertically while a horizontal drag pages the window;
+     without it the browser claims the gesture and the swipe never arrives. */
   .chart{ --track:112px; --lbl:15px; --gap:6px;
-    position:relative; display:flex; justify-content:space-between; gap:6px; margin-top:14px; }
+    position:relative; display:flex; justify-content:space-between; gap:6px; margin-top:14px;
+    touch-action:pan-y; -webkit-user-select:none; user-select:none; }
+  /* the paged title is longer than "7 הימים האחרונים" and flex would wrap it onto a
+     second line, shoving the card open every time you swipe */
+  #chartTitle{ white-space:nowrap; }
+  /* A page that just swaps its numbers reads as a glitch, so the strip is nudged in the
+     direction the finger went and released back. */
+  .chart.paged{ animation:page-in .18s ease-out; }
+  @keyframes page-in{ from{ transform:translateX(var(--page-from,0)); opacity:.55 } to{ transform:none; opacity:1 } }
   .chart .goal{ position:absolute; left:0; right:0; border-top:1.5px dashed #D5D8E0;
     pointer-events:none; z-index:1; }
   .chart .goal span{ position:absolute; inset-inline-end:0; top:-9px; background:var(--card);
@@ -420,7 +430,8 @@
 
   <div class="card hidden" id="weekCard">
     <div class="head-line" style="margin-bottom:4px">
-      <div class="card-t">7 הימים האחרונים</div>
+      <div class="card-t" id="chartTitle">7 הימים האחרונים</div>
+      <button class="linkbtn hidden" id="chartToday">היום ←</button>
     </div>
     <p class="card-s" style="font-size:13.5px">לפי מה שנקלט ברייזאפ</p>
     <div class="chart" id="chart"></div>
@@ -703,6 +714,10 @@ let manualData = [];
 let apiCfg = {token:'', base:''};
 let lastSync = null;
 let chartDay = null;   // day-of-month whose bar is expanded in the chart, null = closed
+// Day-of-month at the newest end of the visible strip; null = follow today. Swiping pages
+// it back through the month. Screen state only — it is deliberately kept out of snapshot()
+// so paging never writes to the cloud and can never touch anyone's data.
+let chartEnd = null;
 let monthlyBudget = null;   // ₪ per month for card spending; null = the DEFAULT_DAILY rate
 let history = {months:[], builtFor:null};   // per-month tier totals from the backfill
 let derived = null;         // the applied three-tier budget, null = plain monthly budget
@@ -1547,26 +1562,52 @@ function renderMath(c){
 // 14th towered over a line it was never being judged against. Today comes from spentToday
 // so it carries the wheel's provisional entry and matches the headline; earlier days are
 // RiseUp only.
+function dayTotal(c,d){
+  if(d===c.dom) return c.spentToday;
+  // Settled entries are in the month and in the tiers, so a bar that ignored them
+  // showed a quiet day on a day money left the household.
+  return fileData.filter(x=>x.d===d && inDaily(x.kind)).reduce((s,x)=>s+x.amt,0)
+    + c.settled.filter(e=>e.d===d).reduce((s,e)=>s+manualAmt(e),0);
+}
+
+// The newest day on screen. Clamped here rather than where the swipe sets it, so a day or
+// month rolling over under a window left open overnight can't strand it out of the month.
+function chartWindowEnd(c){
+  if(chartEnd===null) return c.dom;
+  return Math.min(c.dom, Math.max(Math.min(7,c.dom), chartEnd));
+}
+
 function renderChart(c){
   const card=$('weekCard');
   if(fileData.length===0){ card.classList.add('hidden'); return; }
   card.classList.remove('hidden');
 
-  const from=Math.max(1,c.dom-6), days=[];
-  // A selection made yesterday can fall out of the window once the day rolls over.
-  if(chartDay!==null && (chartDay<from || chartDay>c.dom)) chartDay=null;
-  for(let d=from;d<=c.dom;d++){
-    const total = d===c.dom ? c.spentToday
-      // Settled entries are in the month and in the tiers, so a bar that ignored them
-      // showed a quiet day on a day money left the household.
-      : fileData.filter(x=>x.d===d && inDaily(x.kind)).reduce((s,x)=>s+x.amt,0)
-        + c.settled.filter(e=>e.d===d).reduce((s,e)=>s+manualAmt(e),0);
-    days.push({d,total});
-  }
+  const end=chartWindowEnd(c), from=Math.max(1,end-6), days=[];
+  // Only the month bounds a selection now: paging away from the selected day dims its
+  // marker but leaves the drawer alone, otherwise every swipe would close it.
+  if(chartDay!==null && chartDay>c.dom) chartDay=null;
+  for(let d=from;d<=end;d++) days.push({d,total:dayTotal(c,d)});
+
+  const atToday = end===c.dom;
+  // The range is isolated: left to the bidi algorithm in an RTL line, "11–17" renders as
+  // "17–11" and the card claims the week runs backwards.
+  $('chartTitle').textContent = atToday
+    ? '7 הימים האחרונים'
+    : '⁦'+from+'–'+end+'⁩ ב'+MONTHS[c.m];
+  $('chartToday').classList.toggle('hidden',atToday);
 
   // Scale to the goal at minimum, so an ordinary week doesn't stretch to fill the card
   // and every bar reads against the same ₪300 line.
-  const max=Math.max(c.target,...days.map(x=>x.total))*1.1;
+  //
+  // The scan covers the whole month rather than this window, so that swiping doesn't move
+  // the goal line and the same ₪180 isn't a tall bar on a quiet week and a stub on a loud
+  // one. But one ₪900 afternoon would then flatten every other page into a row of stubs,
+  // so the month's influence stops at twice the goal — and a page that really does hold
+  // that ₪900 still stretches to fit it, alone.
+  const monthTotals=[]; for(let d=1;d<=c.dom;d++) monthTotals.push(dayTotal(c,d));
+  const max=Math.max(c.target,
+                     Math.min(Math.max(...monthTotals), c.target*2),
+                     ...days.map(x=>x.total))*1.1;
 
   // The goal line lives in the chart's frame while the bars live in the track's, so its
   // offset is resolved here in pixels against the same track height the bars use.
@@ -2344,9 +2385,54 @@ document.querySelectorAll('.tier-opt').forEach(b=>
 // Delegated: the chart is rebuilt through innerHTML on every render, so per-column
 // listeners would be discarded on the next sync.
 $('chart').addEventListener('click',e=>{
+  // A drag ends in a click on the column it started over. Without this the drawer would
+  // spring open on every swipe. The flag is cleared on the next pointerdown rather than
+  // here, because a drag doesn't always end in a click — and a flag left standing would
+  // then swallow the following real tap.
+  if(chartSwiped) return;
   const col=e.target.closest('.col'); if(!col) return;
   openDay(parseInt(col.dataset.day,10));
 });
+
+// Swiping the strip pages a week at a time through the month. The days run right-to-left
+// (oldest on the right), so dragging left pulls the strip left and uncovers the older days
+// that were off the right edge; dragging right walks back towards today.
+let swipeX=0, swipeY=0, swiping=false, chartSwiped=false;
+const SWIPE_SLOP=10, SWIPE_GO=40;
+
+function pageChart(back){
+  const c=calc(), end=chartWindowEnd(c);
+  const next = back ? Math.max(Math.min(7,c.dom), end-7) : end+7;
+  if(back && next===end) return;                 // already on days 1–7
+  chartEnd = (!back && next>=c.dom) ? null : next;
+  renderChart(c);
+  const el=$('chart');
+  el.style.setProperty('--page-from', back?'24px':'-24px');
+  el.classList.remove('paged'); void el.offsetWidth; el.classList.add('paged');
+}
+
+$('chart').addEventListener('pointerdown',e=>{
+  swipeX=e.clientX; swipeY=e.clientY; swiping=true; chartSwiped=false;
+});
+// Tracked on the window rather than through setPointerCapture: capturing retargets the
+// click that follows to #chart itself, and the delegated handler above — which finds its
+// column with closest('.col') — would never see one again. The window sees the finger
+// even when it wanders off the strip, which is what capture was wanted for.
+window.addEventListener('pointermove',e=>{
+  if(!swiping) return;
+  const dx=e.clientX-swipeX, dy=e.clientY-swipeY;
+  // Vertical wins ties: a finger heading down the page is scrolling, not swiping.
+  if(Math.abs(dx)>SWIPE_SLOP && Math.abs(dx)>Math.abs(dy)){ chartSwiped=true; e.preventDefault(); }
+});
+window.addEventListener('pointerup',e=>{
+  if(!swiping) return;
+  swiping=false;
+  const dx=e.clientX-swipeX, dy=e.clientY-swipeY;
+  if(Math.abs(dx)>=SWIPE_GO && Math.abs(dx)>Math.abs(dy)) pageChart(dx<0);
+});
+window.addEventListener('pointercancel',()=>{ swiping=false; });
+
+$('chartToday').addEventListener('click',()=>{ chartEnd=null; renderChart(calc()); });
 $('recScrim').addEventListener('click',closeRec);
 $('recSkip').addEventListener('click',closeRec);
 $('recApply').addEventListener('click',()=>{
