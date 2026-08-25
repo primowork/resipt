@@ -441,7 +441,7 @@
     <div class="head-line">
       <div class="card-t">החודש</div>
     </div>
-    <div class="row"><span class="lbl">יצא בכרטיסי אשראי</span><span class="val num" id="monthSpent">₪0</span></div>
+    <div class="row tap" id="monthSpentRow"><span class="lbl">יצא בכרטיסי אשראי</span><span class="val num" id="monthSpent">₪0</span></div>
     <div class="row"><span class="lbl">ימים שנותרו בחודש</span><span class="val num" id="daysLeft">—</span></div>
     <div class="row hidden" id="goalRow"><span class="lbl">יעד חיסכון<span class="sub" id="goalNote"></span></span><span class="val num pos" id="goalVal"></span></div>
     <div class="banner hidden" id="forecast" style="margin:16px 0 0"></div>
@@ -482,6 +482,17 @@
   <div class="stack" style="margin-top:18px">
     <button class="btn btn-primary" id="recApply">השתמש בזה</button>
     <button class="btn btn-ghost" id="recSkip">לא עכשיו</button>
+  </div>
+</div>
+
+<div class="scrim" id="cardScrim"></div>
+<div class="sheet" id="cardSheet" role="dialog" aria-label="השוואה לחודשים קודמים">
+  <div class="grab"></div>
+  <h3>עד היום ה-<span id="cardDom"></span>, בהשוואה לחודשים קודמים</h3>
+  <p class="lead" id="cardLead"></p>
+  <div id="cardRows"></div>
+  <div class="stack" style="margin-top:18px">
+    <button class="btn btn-ghost" id="cardCloseBtn">סגירה</button>
   </div>
 </div>
 
@@ -1040,17 +1051,35 @@ function ymShift(n){
   const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()+n);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
 }
+function daysInYm(ym){
+  const [y,m]=ym.split('-').map(Number);
+  return new Date(y,m,0).getDate();
+}
+// Sum of a month's per-day breakdown through a given day. Clamped to the month's own
+// length, so a short February isn't asked for a day it never had.
+function cardsThrough(days,ym,throughDay){
+  const through=Math.min(throughDay,daysInYm(ym));
+  return (days||[]).slice(0,through).reduce((s,v)=>s+(v||0),0);
+}
 
-function summarise(list){
-  const t={committed:0,big:0,daily:0};
+function summarise(list,ym){
+  const t={committed:0,big:0,daily:0}, days=[];
   for(const x of (list||[])){
     if(x.isIncome) continue;
     if((x.sourceType||'')!=='creditCard') continue;
     const amt=Math.abs(Number(x.amount));
     if(!isFinite(amt)||amt<=0) continue;
     t[tierOf(x,amt,x.businessName)]+=amt;
+    // Kept alongside the tier totals so "how much was out by day N" can be answered later
+    // without a second fetch — the same RiseUp response already carries the date, it was
+    // just being thrown away the moment it was measured.
+    const iso=String(x.transactionDate||'').slice(0,10);
+    if(iso.slice(0,7)===ym){
+      const d=parseInt(iso.slice(8,10),10);
+      days[d-1]=(days[d-1]||0)+amt;
+    }
   }
-  return t;
+  return {...t, days};
 }
 
 async function fetchMonth(ym){
@@ -1068,7 +1097,7 @@ async function backfill(force){
   for(let i=1;i<=HISTORY_MONTHS;i++){
     const ym=ymShift(-i);
     try{
-      months.push(Object.assign({ym},summarise(await fetchMonth(ym))));
+      months.push(Object.assign({ym},summarise(await fetchMonth(ym),ym)));
       history.months=months.slice();                 // keep what we have if a later call dies
       save();
       await new Promise(r=>setTimeout(r,400));
@@ -1077,7 +1106,7 @@ async function backfill(force){
       // way the reason is recorded — a silent stop leaves the user staring at nothing.
       if(String(e.message).includes('429')){
         await new Promise(r=>setTimeout(r,4000));
-        try{ months.push(Object.assign({ym},summarise(await fetchMonth(ym)))); history.months=months.slice(); save(); continue; }
+        try{ months.push(Object.assign({ym},summarise(await fetchMonth(ym),ym))); history.months=months.slice(); save(); continue; }
         catch(e2){ e=e2; }
       }
       history.error=e.message||'שגיאה'; break;
@@ -1950,6 +1979,48 @@ function closeRec(){
   $('recScrim').classList.remove('open'); $('recSheet').classList.remove('open');
 }
 
+/* ---------------- same-day-of-month comparison ---------------- */
+// "How much was out by today's date" only reads clean against a month that actually has
+// this many days — a comparison against day 30 of February would silently mean day 28.
+function renderCardCompare(c){
+  $('cardDom').textContent=c.dom;
+  const months=(history.months||[]);
+  const haveDays=months.length && months.every(m=>Array.isArray(m.days));
+
+  if(!haveDays){
+    $('cardLead').textContent='עוד לא נשמר פילוח יומי מהחודשים הקודמים — מושך עכשיו מרייסאפ.';
+    $('cardRows').innerHTML='';
+    backfill(true).then(()=>{ if($('cardSheet').classList.contains('open')) renderCardCompare(calc()); });
+    return;
+  }
+  if(!months.length){
+    $('cardLead').textContent='אין עדיין היסטוריה להשוואה.';
+    $('cardRows').innerHTML='';
+    return;
+  }
+
+  $('cardLead').innerHTML='<b>החודש</b>: '+fmt(c.spentMonth)+' עד היום.';
+  $('cardRows').innerHTML=months.map(m=>{
+    const val=cardsThrough(m.days,m.ym,c.dom);
+    // Told from the current month's side: spending less than that month by now is the
+    // improvement (green), spending more is the opposite — same colour rule the rest of
+    // the app uses for under/over a target.
+    const diff=c.spentMonth-val;
+    const cls=diff<0?'pos':diff>0?'neg':'';
+    const note=diff<0?'החודש פחות ב-'+fmt(-diff):diff>0?'החודש יותר ב-'+fmt(diff):'כמו החודש';
+    return '<div class="row"><span class="lbl"><b>'+MONTHS[parseInt(m.ym.slice(5,7),10)-1]+'</b>'
+      + '<span class="sub">'+esc(note)+'</span></span>'
+      + '<span class="val num '+cls+'">'+fmt(val)+'</span></div>';
+  }).join('');
+}
+function openCardCompare(){
+  $('cardScrim').classList.add('open'); $('cardSheet').classList.add('open');
+  renderCardCompare(calc());
+}
+function closeCardCompare(){
+  $('cardScrim').classList.remove('open'); $('cardSheet').classList.remove('open');
+}
+
 /* ---------------- sheet ---------------- */
 // Pure: takes the figure to describe rather than reading the saved one, so the hint can
 // preview a value being typed without touching the budget the app is currently using.
@@ -2444,6 +2515,10 @@ $('recApply').addEventListener('click',()=>{
 
 $('dayScrim').addEventListener('click',closeDay);
 $('dayCloseBtn').addEventListener('click',closeDay);
+
+$('monthSpentRow').addEventListener('click',openCardCompare);
+$('cardScrim').addEventListener('click',closeCardCompare);
+$('cardCloseBtn').addEventListener('click',closeCardCompare);
 
 $('investigateBtn').addEventListener('click',()=>{
   const p=$('investigatePanel');
