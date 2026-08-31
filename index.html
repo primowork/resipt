@@ -496,6 +496,19 @@
   </div>
 </div>
 
+<div class="scrim" id="trendScrim"></div>
+<div class="sheet" id="trendSheet" role="dialog" aria-label="מגמת הקטגוריות לאורך זמן">
+  <div class="grab"></div>
+  <h3>קבועות, גדולות ויומי לאורך זמן</h3>
+  <p class="lead" id="trendLead"></p>
+  <div class="scrollx" style="overflow-x:auto; margin-top:10px">
+    <table id="trendTable" style="width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums"></table>
+  </div>
+  <div class="stack" style="margin-top:18px">
+    <button class="btn btn-ghost" id="trendCloseBtn">סגירה</button>
+  </div>
+</div>
+
 <div class="scrim" id="dayScrim"></div>
 <div class="sheet" id="daySheet" role="dialog" aria-label="הוצאות היום שנבחר">
   <div class="grab"></div>
@@ -633,7 +646,7 @@
     גדולות מעל ₪1,000, שעליהם כבר שמור כסף בצד. זה גם לא הכסף שיש בחשבון הבנק,
     אלא התקציב שהאפליקציה מחלקת.
   </p>
-  <div class="row hidden" id="reservedRow"><span class="lbl">שמור מראש<span class="sub" id="reservedNote"></span></span><span class="val num" id="reservedVal"></span></div>
+  <div class="row hidden tap" id="reservedRow"><span class="lbl">שמור מראש<span class="sub" id="reservedNote"></span></span><span class="val num" id="reservedVal"></span></div>
   <div class="row"><span class="lbl">ממוצע ליום מתחילת החודש<span class="sub" id="avgNote"></span></span><span class="val num" id="avgDaily">₪0</span></div>
 
   <hr style="border:none; border-top:1px solid #E4E6EC; margin:22px 0 20px">
@@ -2021,6 +2034,51 @@ function closeCardCompare(){
   $('cardScrim').classList.remove('open'); $('cardSheet').classList.remove('open');
 }
 
+/* ---------------- committed/big/daily trend ---------------- */
+// Moving a merchant to "committed" or "big" (setTier) counts it in full toward that
+// month's mean/median next time history is measured, while the daily median it left
+// still gets its usual 10% cut — so a re-filing can inflate the reserved total and make
+// the daily target look easier without spending a shekel less. Nothing here computes a
+// verdict about that; it just lines the three tiers up by month so a drift is visible,
+// the way the rest of the app shows a number and stops (see reservedNote et al).
+function renderTrendCompare(c){
+  const months=[...(history.months||[])].reverse();   // oldest first, natural reading order
+  const nOverrides=Object.keys(overrides).length;
+  $('trendLead').textContent = nOverrides
+    ? nOverrides+(nOverrides===1?' בית עסק משויך':' בתי עסק משויכים')+' ידנית לקטגוריה שונה מהאוטומטית.'
+    : 'אין כרגע שיוכים ידניים לקטגוריה.';
+
+  const head='<tr><th style="text-align:start; padding:8px 4px; border-bottom:1px solid #E6E8EF">חודש</th>'
+    + '<th style="text-align:start; padding:8px 4px; border-bottom:1px solid #E6E8EF">קבועות</th>'
+    + '<th style="text-align:start; padding:8px 4px; border-bottom:1px solid #E6E8EF">גדולות</th>'
+    + '<th style="text-align:start; padding:8px 4px; border-bottom:1px solid #E6E8EF">יומי</th></tr>';
+
+  const row=(label,committed,big,daily)=>
+    '<tr><td style="padding:8px 4px">'+esc(label)+'</td>'
+    + '<td style="padding:8px 4px">'+fmt(committed)+'</td>'
+    + '<td style="padding:8px 4px">'+fmt(big)+'</td>'
+    + '<td style="padding:8px 4px">'+fmt(daily)+'</td></tr>';
+
+  const body=months.map(m=>row(MONTHS[parseInt(m.ym.slice(5,7),10)-1],m.committed,m.big,m.daily)).join('')
+    + row('החודש (עד עכשיו)',c.tiers.committed,c.tiers.big,c.tiers.daily);
+
+  const foot=derived
+    ? '<tr style="border-top:1px solid #E6E8EF"><td style="padding:8px 4px; color:var(--ink-3)">נגזר כרגע</td>'
+      + '<td style="padding:8px 4px; color:var(--ink-3)">'+fmt(derived.committed)+'</td>'
+      + '<td style="padding:8px 4px; color:var(--ink-3)">'+fmt(derived.big)+'</td>'
+      + '<td style="padding:8px 4px; color:var(--ink-3)">'+fmt(derived.dailyTarget)+'</td></tr>'
+    : '';
+
+  $('trendTable').innerHTML=head+body+foot;
+}
+function openTrendCompare(){
+  $('trendScrim').classList.add('open'); $('trendSheet').classList.add('open');
+  renderTrendCompare(calc());
+}
+function closeTrendCompare(){
+  $('trendScrim').classList.remove('open'); $('trendSheet').classList.remove('open');
+}
+
 /* ---------------- sheet ---------------- */
 // Pure: takes the figure to describe rather than reading the saved one, so the hint can
 // preview a value being typed without touching the budget the app is currently using.
@@ -2519,6 +2577,10 @@ $('dayCloseBtn').addEventListener('click',closeDay);
 $('monthSpentRow').addEventListener('click',openCardCompare);
 $('cardScrim').addEventListener('click',closeCardCompare);
 $('cardCloseBtn').addEventListener('click',closeCardCompare);
+
+$('reservedRow').addEventListener('click',openTrendCompare);
+$('trendScrim').addEventListener('click',closeTrendCompare);
+$('trendCloseBtn').addEventListener('click',closeTrendCompare);
 
 $('investigateBtn').addEventListener('click',()=>{
   const p=$('investigatePanel');
