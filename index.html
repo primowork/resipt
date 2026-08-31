@@ -311,6 +311,13 @@
     transform:translateY(100%); transition:transform .3s cubic-bezier(.2,.7,.3,1);
     max-width:480px; margin:0 auto; }
   .sheet.open{ transform:none; }
+  /* #reservedRow lives inside the settings sheet (#sheet), so the trend view it opens is
+     the first sheet in the app ever opened from a tap inside another open sheet. At the
+     shared z-index every other sheet uses, #sheet — being later in the DOM — stacked on
+     top and hid it completely: the trend sheet opened underneath, unseen, and closing the
+     settings sheet felt like the tap had done nothing at all. */
+  #trendScrim{ z-index:95; }
+  #trendSheet{ z-index:96; }
   .grab{ width:42px; height:5px; border-radius:3px; background:#DDDFE6; margin:6px auto 18px; }
   .sheet h3{ margin:0 0 6px; font-size:22px; font-weight:700; letter-spacing:-.4px; }
   .sheet .lead{ margin:0 0 18px; font-size:15px; color:var(--ink-2); line-height:1.6; }
