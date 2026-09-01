@@ -457,6 +457,7 @@
          halfway down the card. -->
     <button class="linkbtn hidden" id="investigateBtn" style="text-align:right; margin-top:14px">על מה יצא הכסף ›</button>
     <div id="investigatePanel" class="hidden"></div>
+    <button class="linkbtn hidden" id="summaryBtn" style="text-align:right; margin-top:10px">סיכום חודש ›</button>
   </div>
 
   <div class="card hidden" id="decisionsCard">
@@ -514,6 +515,21 @@
   </div>
   <div class="stack" style="margin-top:18px">
     <button class="btn btn-ghost" id="trendCloseBtn">סגירה</button>
+  </div>
+</div>
+
+<div class="scrim" id="summaryScrim"></div>
+<div class="sheet" id="summarySheet" role="dialog" aria-label="סיכום חודשי">
+  <div class="grab"></div>
+  <div class="row" style="border:none; padding:0 0 4px">
+    <button class="linkbtn" id="summaryNext" style="width:auto">החודש הבא ›</button>
+    <button class="linkbtn" id="summaryPrev" style="width:auto">‹ החודש הקודם</button>
+  </div>
+  <h3 id="summaryTitle"></h3>
+  <p class="lead" id="summaryLead" style="display:none"></p>
+  <div id="summaryRows"></div>
+  <div class="stack" style="margin-top:18px">
+    <button class="btn btn-ghost" id="summaryCloseBtn">סגירה</button>
   </div>
 </div>
 
@@ -1085,10 +1101,16 @@ function cardsThrough(days,ym,throughDay){
 
 function summarise(list,ym){
   const t={committed:0,big:0,daily:0}, days=[];
+  // income and spentAll read every transaction RiseUp sends — every sourceType, not just
+  // the card — so the monthly summary can answer "how much came in" and "how much left
+  // the account altogether", figures the tier totals below were never meant to cover.
+  let income=0, spentAll=0;
   for(const x of (list||[])){
-    if(x.isIncome) continue;
+    const amtAll=Math.abs(Number(x.amount));
+    if(x.isIncome){ if(isFinite(amtAll)&&amtAll>0) income+=amtAll; continue; }
+    if(isFinite(amtAll)&&amtAll>0) spentAll+=amtAll;
     if((x.sourceType||'')!=='creditCard') continue;
-    const amt=Math.abs(Number(x.amount));
+    const amt=amtAll;
     if(!isFinite(amt)||amt<=0) continue;
     t[tierOf(x,amt,x.businessName)]+=amt;
     // Kept alongside the tier totals so "how much was out by day N" can be answered later
@@ -1100,7 +1122,7 @@ function summarise(list,ym){
       days[d-1]=(days[d-1]||0)+amt;
     }
   }
-  return {...t, days};
+  return {...t, days, income, spentAll};
 }
 
 async function fetchMonth(ym){
@@ -1203,7 +1225,13 @@ async function syncFromApi(silent){
     if(!res.ok) throw new Error('שגיאת שרת '+res.status);
 
     const data=await res.json();
-    fileData=mapApiTransactions(data && data.transactions);
+    const raw=data && data.transactions;
+    fileData=mapApiTransactions(raw);
+    // The same response mapApiTransactions just filtered down to card charges also
+    // carries income and non-card spending — summarise() reads all of it, kept here
+    // rather than recomputed later since the raw list isn't kept around after this.
+    const cf=summarise(raw,ymNow());
+    history.currentCashflow={ym:ymNow(), income:cf.income, spentAll:cf.spentAll};
     retier();          // re-applies the splits: mapping returns the raw charged amounts
     reconcileChecks();
     lastSync=Date.now(); syncError=null;
@@ -1562,6 +1590,8 @@ function render(animate){
 
   $('investigateBtn').classList.toggle('hidden',fileData.length===0);
   if(!$('investigatePanel').classList.contains('hidden')) renderInvestigation();
+  $('summaryBtn').classList.toggle('hidden',
+    fileData.length===0 && (history.months||[]).length===0 && meals.length===0);
   $('onboard').classList.toggle('hidden',configured()||fileData.length>0);
   refreshStatus();
 }
@@ -2133,6 +2163,81 @@ function closeTrendCompare(){
   $('trendScrim').classList.remove('open'); $('trendSheet').classList.remove('open');
 }
 
+/* ---------------- monthly summary ---------------- */
+// Newest first, matching history.months' own order — the current month plus however many
+// of the last 6 have actually been fetched. Meals reach back 24 months (see the prune in
+// load()) but income/spentAll only exist for months RiseUp was asked about, so browsing
+// is capped at what backfill() already covers rather than promising a decade of history
+// with nothing behind most of it.
+function summaryMonths(){ return [ymNow(), ...(history.months||[]).map(m=>m.ym)]; }
+
+function summaryDataFor(ym){
+  const isCurrent = ym===ymNow();
+  const hist = (history.months||[]).find(m=>m.ym===ym);
+  const cardTotal = isCurrent ? calc().spentMonth : (hist ? hist.committed+hist.big+hist.daily : null);
+  // Older saves (or a month whose fetch failed) won't carry these — undefined, not 0, so
+  // a real zero income month is never confused with one nobody has measured yet.
+  const cfSrc = isCurrent
+    ? (history.currentCashflow && history.currentCashflow.ym===ym ? history.currentCashflow : null)
+    : (hist && typeof hist.income==='number' ? hist : null);
+  return {
+    cardTotal,
+    income: cfSrc ? cfSrc.income : null,
+    spentAll: cfSrc ? cfSrc.spentAll : null,
+    meals: mealStats().byMonth[ym]||0,
+  };
+}
+
+let summaryYm = null;
+function renderSummary(){
+  const months=summaryMonths();
+  if(!summaryYm || months.indexOf(summaryYm)===-1) summaryYm=months[0];
+  const idx=months.indexOf(summaryYm), d=summaryDataFor(summaryYm);
+  const [y,m]=summaryYm.split('-').map(Number);
+  $('summaryTitle').textContent=MONTHS[m-1]+' '+y;
+  // "Next" walks toward today (index 0); "prev" walks back through history.months, which
+  // ends the moment the array does — there is nothing to page back into beyond that.
+  $('summaryNext').classList.toggle('hidden',idx<=0);
+  $('summaryPrev').classList.toggle('hidden',idx>=months.length-1);
+
+  const row=(lbl,val,cls)=>'<div class="row"><span class="lbl">'+esc(lbl)+'</span>'
+    + '<span class="val num'+(cls?' '+cls:'')+'">'+esc(val)+'</span></div>';
+  const rows=[row('יצא בכרטיסי אשראי', d.cardTotal!=null?fmt(d.cardTotal):'—')];
+  if(d.income!=null){
+    rows.push(row('סך הכל יצא מהחשבון',fmt(d.spentAll)));
+    rows.push(row('הכנסות',fmt(d.income),'pos'));
+  }
+  rows.push(row('הבאת אוכל מהבית', d.meals+(d.meals===1?' פעם':' פעמים')));
+  $('summaryRows').innerHTML=rows.join('');
+
+  const lead=$('summaryLead');
+  if(d.income==null){
+    lead.style.display='';
+    lead.textContent='עוד לא נמשך נתון הכנסות/תזרים מלא לחודש הזה — מושך עכשיו מרייסאפ.';
+  } else lead.style.display='none';
+}
+
+function openSummary(){
+  summaryYm=ymNow();
+  $('summaryScrim').classList.add('open'); $('summarySheet').classList.add('open');
+  renderSummary();
+  // At most one refetch per open, however many months get paged through afterward — not
+  // one per row, which would hammer RiseUp on every tap of "prev".
+  const staleHistory=!(history.months||[]).length || (history.months||[]).some(x=>typeof x.income!=='number');
+  if(staleHistory) backfill(true).then(()=>{ if($('summarySheet').classList.contains('open')) renderSummary(); });
+  if(!(history.currentCashflow && history.currentCashflow.ym===ymNow()))
+    syncFromApi(true).then(()=>{ if($('summarySheet').classList.contains('open')) renderSummary(); });
+}
+function closeSummary(){
+  $('summaryScrim').classList.remove('open'); $('summarySheet').classList.remove('open');
+}
+function summaryStep(dir){
+  const months=summaryMonths(), idx=months.indexOf(summaryYm), next=idx+dir;
+  if(next<0 || next>=months.length) return;
+  summaryYm=months[next];
+  renderSummary();
+}
+
 /* ---------------- sheet ---------------- */
 // Pure: takes the figure to describe rather than reading the saved one, so the hint can
 // preview a value being typed without touching the budget the app is currently using.
@@ -2635,6 +2740,12 @@ $('cardCloseBtn').addEventListener('click',closeCardCompare);
 $('reservedRow').addEventListener('click',openTrendCompare);
 $('trendScrim').addEventListener('click',closeTrendCompare);
 $('trendCloseBtn').addEventListener('click',closeTrendCompare);
+
+$('summaryBtn').addEventListener('click',openSummary);
+$('summaryScrim').addEventListener('click',closeSummary);
+$('summaryCloseBtn').addEventListener('click',closeSummary);
+$('summaryPrev').addEventListener('click',()=>summaryStep(1));
+$('summaryNext').addEventListener('click',()=>summaryStep(-1));
 
 $('investigateBtn').addEventListener('click',()=>{
   const p=$('investigatePanel');
