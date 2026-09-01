@@ -508,6 +508,7 @@
   <div class="grab"></div>
   <h3>קבועות, גדולות ויומי לאורך זמן</h3>
   <p class="lead" id="trendLead"></p>
+  <div id="trendHeadline" class="hidden" style="margin-bottom:14px"></div>
   <div class="scrollx" style="overflow-x:auto; margin-top:10px">
     <table id="trendTable" style="width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums"></table>
   </div>
@@ -2045,15 +2046,61 @@ function closeCardCompare(){
 // Moving a merchant to "committed" or "big" (setTier) counts it in full toward that
 // month's mean/median next time history is measured, while the daily median it left
 // still gets its usual 10% cut — so a re-filing can inflate the reserved total and make
-// the daily target look easier without spending a shekel less. Nothing here computes a
-// verdict about that; it just lines the three tiers up by month so a drift is visible,
-// the way the rest of the app shows a number and stops (see reservedNote et al).
+// the daily target look easier without spending a shekel less. The table itself computes
+// no verdict about that — it just lines the three tiers up by month so a drift is visible,
+// the way the rest of the app shows a number and stops (see reservedNote et al). The one
+// exception is the headline pair below: one line to be pleased about, one to watch, read
+// off the month so far against its own derived reference rather than a raw historical
+// month (which would always look good early in the month simply for not having finished
+// yet). Both sides are read as ₪/day: the derived figures are monthly, so dividing by
+// daysInMonth turns them into the same unit a partial month is already in — a rough
+// approximation for the lumpier committed/big tiers, but a fair one for a single headline.
+function trendHeadline(c){
+  if(!derived || c.dom<3) return null;    // too little of the month has happened to mean anything
+  const totalSpent=c.tiers.committed+c.tiers.big+c.tiers.daily;
+  if(totalSpent<=0) return null;          // nothing filed yet this month — nothing to compare
+
+  const LABELS={committed:'הקבועות',big:'הגדולות',daily:'היומיות'};
+  const targets={committed:derived.committed,big:derived.big,daily:derived.dailyTarget};
+  const tiers=['committed','big','daily'].map(k=>{
+    const spent=c.tiers[k], rate=spent/c.dom, target=targets[k]/c.daysInMonth;
+    return {k, spent, pct: target>0 ? (rate-target)/target : 0};
+  });
+  const phrase=(t,dir)=>{
+    const pct=Math.round(Math.abs(t.pct)*100);
+    return pct<3 ? LABELS[t.k]+' שלך בדיוק בקצב הרגיל'
+      : LABELS[t.k]+' שלך '+pct+'% '+(dir==='down'?'מתחת':'מעל')+' לקצב הרגיל החודש';
+  };
+
+  const worst=[...tiers].sort((a,b)=>a.pct-b.pct).pop();
+  // A committed/big tier sitting at ₪0 hasn't been "saved" — it just hasn't billed yet,
+  // so it can't stand for the good news even though the arithmetic reads as 100% under.
+  const goodPool=tiers.filter(t=>t.spent>0).sort((a,b)=>a.pct-b.pct);
+  const best=goodPool[0];
+  const bestIsGood=best && best.pct<-0.03;
+  const allUnder=tiers.every(t=>t.pct<-0.03);
+
+  return {
+    good: allUnder ? 'אתה מתחת לקצב הרגיל בכל שלוש הקטגוריות החודש'
+        : bestIsGood ? phrase(best,'down') : null,
+    // Nothing is actually running hot when every tier is under pace — naming a "worst"
+    // among three good numbers would read as a warning that isn't real.
+    bad: allUnder ? null : phrase(worst,'up'),
+  };
+}
+
 function renderTrendCompare(c){
   const months=[...(history.months||[])].reverse();   // oldest first, natural reading order
   const nOverrides=Object.keys(overrides).length;
   $('trendLead').textContent = nOverrides
     ? nOverrides+(nOverrides===1?' בית עסק משויך':' בתי עסק משויכים')+' ידנית לקטגוריה שונה מהאוטומטית.'
     : 'אין כרגע שיוכים ידניים לקטגוריה.';
+
+  const hl=trendHeadline(c), hlEl=$('trendHeadline');
+  hlEl.classList.toggle('hidden', !hl || (!hl.good && !hl.bad));
+  if(hl) hlEl.innerHTML =
+       (hl.good ? '<p style="margin:0 0 6px; color:var(--green); font-weight:600">✓ '+esc(hl.good)+'</p>' : '')
+     + (hl.bad ? '<p style="margin:0; color:var(--orange); font-weight:600">! '+esc(hl.bad)+'</p>' : '');
 
   const head='<tr><th style="text-align:start; padding:8px 4px; border-bottom:1px solid #E6E8EF">חודש</th>'
     + '<th style="text-align:start; padding:8px 4px; border-bottom:1px solid #E6E8EF">קבועות</th>'
