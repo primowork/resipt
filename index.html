@@ -544,6 +544,7 @@
   </div>
   <div id="searchSuggest"></div>
   <div id="searchResults"></div>
+  <button class="linkbtn hidden" id="searchMoreBtn" style="margin-top:6px">חפש גם בחודשים ישנים יותר ›</button>
   <div class="stack" style="margin-top:18px">
     <button class="btn btn-primary hidden" id="searchCsvBtn">הורדת CSV</button>
     <button class="btn btn-ghost" id="searchCloseBtn">סגירה</button>
@@ -2260,29 +2261,45 @@ function summaryStep(dir){
 }
 
 /* ---------------- transaction search ---------------- */
-// Every name this month's fileData or any backfilled month's items has ever carried,
-// plus overrides — a merchant assigned a tier last spring but not charged since is still
-// worth finding. Built fresh on each open rather than kept as state: it's small, and
-// stale suggestions after a sync would be worse than recomputing it.
+// Months fetched live, beyond the 6 backfill() already keeps, because a search came up
+// short. Deliberately not merged into history.months — that array is the window derive()
+// averages the budget from, and padding it with a 9th or 10th month would quietly change
+// what "the last 6 months" means everywhere else in the app. Kept only for this open
+// sheet: gone on close, refetched if the user searches deep again later. Reusable across
+// searches within the same open sheet, though — a month fetched for "קפה" is still a
+// month's worth of names for "סופר" right after, with no second fetch.
+let searchExtra = [];
+const SEARCH_DEEP_CAP = 24;   // matches the meal log's own retention window
+const SEARCH_DEEP_BATCH = 3;
+
+// Every name this month's fileData, any backfilled or live-fetched month's items, or
+// overrides has ever carried — a merchant assigned a tier last spring but not charged
+// since is still worth finding. Built fresh on each open rather than kept as state: it's
+// small, and stale suggestions after a sync would be worse than recomputing it.
 function knownMerchants(){
   const names=new Set();
   for(const x of fileData) if(x.name) names.add(x.name.trim());
   for(const m of (history.months||[])) for(const it of (m.items||[])) if(it.name) names.add(it.name.trim());
+  for(const m of searchExtra) for(const it of (m.items||[])) if(it.name) names.add(it.name.trim());
   for(const k in overrides) if(k) names.add(k);
   return [...names].filter(Boolean).sort((a,b)=>a.localeCompare(b,'he'));
 }
 
 // Exact match only — the fuzziness lives in the suggestion list below, not here. Once a
 // name is chosen (typed in full or tapped from a suggestion) every month is searched the
-// same way, current month from fileData and the rest from whatever backfill() captured.
+// same way: current month from fileData, the backfilled 6 from history.months, and
+// whatever's been fetched live beyond that from searchExtra.
 function searchResults(name){
   const k=(name||'').trim(); if(!k) return [];
   const rows=[];
   for(const x of fileData) if((x.name||'').trim()===k) rows.push({ym:ymNow(), d:x.d, amt:x.amt0!=null?x.amt0:x.amt});
-  for(const m of (history.months||[])) for(const it of (m.items||[])) if((it.name||'').trim()===k) rows.push({ym:m.ym, d:it.d, amt:it.amt});
+  for(const m of [...(history.months||[]), ...searchExtra])
+    for(const it of (m.items||[])) if((it.name||'').trim()===k) rows.push({ym:m.ym, d:it.d, amt:it.amt});
   rows.sort((a,b)=> b.ym===a.ym ? b.d-a.d : b.ym.localeCompare(a.ym));
   return rows;
 }
+
+function monthsCoveredBySearch(){ return (history.months||[]).length+searchExtra.length; }
 
 function renderSearchSuggest(q){
   const el=$('searchSuggest'), query=q.trim();
@@ -2294,12 +2311,18 @@ function renderSearchSuggest(q){
 }
 
 function renderSearchResults(name){
-  const resEl=$('searchResults'), csvBtn=$('searchCsvBtn');
+  const resEl=$('searchResults'), csvBtn=$('searchCsvBtn'), moreBtn=$('searchMoreBtn');
   const k=name.trim();
+
+  const covered=monthsCoveredBySearch();
+  moreBtn.classList.toggle('hidden', covered>=SEARCH_DEEP_CAP);
+  if(!moreBtn.classList.contains('loading')) moreBtn.textContent='חפש גם בחודשים ישנים יותר ›';
+
   if(!k){ resEl.innerHTML=''; csvBtn.classList.add('hidden'); return; }
   const rows=searchResults(k);
   if(!rows.length){
-    resEl.innerHTML='<div class="blank"><div class="t">אין עסקאות בשם הזה, לא החודש ולא ב-'+((history.months||[]).length)+' החודשים שלפניו.</div></div>';
+    resEl.innerHTML='<div class="blank"><div class="t">אין עסקאות בשם הזה ב-'+covered+' החודשים האחרונים'
+      +(covered<SEARCH_DEEP_CAP?' — אפשר לחפש גם אחורה מזה.':'.')+'</div></div>';
     csvBtn.classList.add('hidden');
     return;
   }
@@ -2330,7 +2353,37 @@ function renderSearchResults(name){
   ).join('');
 }
 
+// Fetches a few more months live, the same one-month-at-a-time endpoint backfill() already
+// uses — there is no evidence RiseUp has anything broader, so this just walks further back
+// through what's already known to work, paced the same courteous 400ms apart.
+async function loadSearchDeeper(){
+  if(!apiCfg.token){ toast('צריך טוקן ברייזאפ כדי לחפש אחורה'); return; }
+  const btn=$('searchMoreBtn');
+  btn.classList.add('loading'); btn.disabled=true; btn.textContent='מחפש…';
+  for(let i=0;i<SEARCH_DEEP_BATCH && monthsCoveredBySearch()<SEARCH_DEEP_CAP;i++){
+    const ym=ymShift(-(monthsCoveredBySearch()+1));
+    try{
+      const list=await fetchMonth(ym);
+      searchExtra.push({ym, items:summarise(list,ym).items});
+    }catch(e){
+      if(String(e.message).includes('429')){
+        await new Promise(r=>setTimeout(r,4000));
+        try{ const list=await fetchMonth(ym); searchExtra.push({ym, items:summarise(list,ym).items}); continue; }
+        catch(e2){ /* give up this round, report below */ }
+      }
+      toast('לא הצלחתי למשוך עוד — '+(e.message||'שגיאה'));
+      break;
+    }
+    await new Promise(r=>setTimeout(r,400));
+  }
+  btn.classList.remove('loading'); btn.disabled=false;
+  // Re-render regardless of got>0 — even a failed/empty round moves the cap counter and
+  // the button's own state needs to reflect that.
+  renderSearchResults($('searchInput').value);
+}
+
 function openSearch(prefill){
+  searchExtra=[];
   $('searchInput').value=prefill||'';
   $('searchSuggest').innerHTML=''; $('searchSuggest').classList.add('hidden');
   renderSearchResults(prefill||'');
@@ -2885,6 +2938,7 @@ $('searchSuggest').addEventListener('click',e=>{
 $('searchCsvBtn').addEventListener('click',()=>{
   const name=$('searchInput').value.trim(); if(name) downloadCsv(name);
 });
+$('searchMoreBtn').addEventListener('click',loadSearchDeeper);
 $('tierHistoryBtn').addEventListener('click',()=>{
   const name=tierTarget; closeTier(); if(name) openSearch(name);
 });
