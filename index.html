@@ -458,6 +458,7 @@
     <button class="linkbtn hidden" id="investigateBtn" style="text-align:right; margin-top:14px">על מה יצא הכסף ›</button>
     <div id="investigatePanel" class="hidden"></div>
     <button class="linkbtn hidden" id="summaryBtn" style="text-align:right; margin-top:10px">סיכום חודש ›</button>
+    <button class="linkbtn hidden" id="searchBtn" style="text-align:right; margin-top:10px">חיפוש עסקאות ›</button>
   </div>
 
   <div class="card hidden" id="decisionsCard">
@@ -533,6 +534,22 @@
   </div>
 </div>
 
+<div class="scrim" id="searchScrim"></div>
+<div class="sheet" id="searchSheet" role="dialog" aria-label="חיפוש עסקאות">
+  <div class="grab"></div>
+  <h3>חיפוש עסקאות</h3>
+  <div class="field" style="margin-bottom:4px">
+    <label for="searchInput">שם בית עסק</label>
+    <input type="text" id="searchInput" autocomplete="off" placeholder="למשל קפה פיקול">
+  </div>
+  <div id="searchSuggest"></div>
+  <div id="searchResults"></div>
+  <div class="stack" style="margin-top:18px">
+    <button class="btn btn-primary hidden" id="searchCsvBtn">הורדת CSV</button>
+    <button class="btn btn-ghost" id="searchCloseBtn">סגירה</button>
+  </div>
+</div>
+
 <div class="scrim" id="dayScrim"></div>
 <div class="sheet" id="daySheet" role="dialog" aria-label="הוצאות היום שנבחר">
   <div class="grab"></div>
@@ -594,6 +611,7 @@
   <button class="btn btn-ghost split-opt hidden" id="splitBtn">
     <span id="splitLabel">מתחלק עם אישתי</span><span class="sub" id="splitSub"></span>
   </button>
+  <button class="linkbtn" id="tierHistoryBtn" style="text-align:right; margin-top:10px">היסטוריית עסקאות ›</button>
   <button class="btn btn-ghost" id="tierClose" style="margin-top:18px">ביטול</button>
 </div>
 
@@ -1100,7 +1118,7 @@ function cardsThrough(days,ym,throughDay){
 }
 
 function summarise(list,ym){
-  const t={committed:0,big:0,daily:0}, days=[];
+  const t={committed:0,big:0,daily:0}, days=[], items=[];
   // income and spentAll read every transaction RiseUp sends — every sourceType, not just
   // the card — so the monthly summary can answer "how much came in" and "how much left
   // the account altogether", figures the tier totals below were never meant to cover.
@@ -1117,12 +1135,14 @@ function summarise(list,ym){
     // without a second fetch — the same RiseUp response already carries the date, it was
     // just being thrown away the moment it was measured.
     const iso=String(x.transactionDate||'').slice(0,10);
-    if(iso.slice(0,7)===ym){
-      const d=parseInt(iso.slice(8,10),10);
-      days[d-1]=(days[d-1]||0)+amt;
-    }
+    const d = iso.slice(0,7)===ym ? parseInt(iso.slice(8,10),10) : 0;
+    if(d>0) days[d-1]=(days[d-1]||0)+amt;
+    // One line per charge, kept so a merchant's history can be searched across months —
+    // a handful of bytes per transaction, a few hundred a month, nothing like the raw
+    // response this was once worried would bloat localStorage.
+    items.push({name:x.businessName||'', amt, d});
   }
-  return {...t, days, income, spentAll};
+  return {...t, days, income, spentAll, items};
 }
 
 async function fetchMonth(ym){
@@ -1592,6 +1612,7 @@ function render(animate){
   if(!$('investigatePanel').classList.contains('hidden')) renderInvestigation();
   $('summaryBtn').classList.toggle('hidden',
     fileData.length===0 && (history.months||[]).length===0 && meals.length===0);
+  $('searchBtn').classList.toggle('hidden', fileData.length===0 && (history.months||[]).length===0);
   $('onboard').classList.toggle('hidden',configured()||fileData.length>0);
   refreshStatus();
 }
@@ -2238,6 +2259,106 @@ function summaryStep(dir){
   renderSummary();
 }
 
+/* ---------------- transaction search ---------------- */
+// Every name this month's fileData or any backfilled month's items has ever carried,
+// plus overrides — a merchant assigned a tier last spring but not charged since is still
+// worth finding. Built fresh on each open rather than kept as state: it's small, and
+// stale suggestions after a sync would be worse than recomputing it.
+function knownMerchants(){
+  const names=new Set();
+  for(const x of fileData) if(x.name) names.add(x.name.trim());
+  for(const m of (history.months||[])) for(const it of (m.items||[])) if(it.name) names.add(it.name.trim());
+  for(const k in overrides) if(k) names.add(k);
+  return [...names].filter(Boolean).sort((a,b)=>a.localeCompare(b,'he'));
+}
+
+// Exact match only — the fuzziness lives in the suggestion list below, not here. Once a
+// name is chosen (typed in full or tapped from a suggestion) every month is searched the
+// same way, current month from fileData and the rest from whatever backfill() captured.
+function searchResults(name){
+  const k=(name||'').trim(); if(!k) return [];
+  const rows=[];
+  for(const x of fileData) if((x.name||'').trim()===k) rows.push({ym:ymNow(), d:x.d, amt:x.amt0!=null?x.amt0:x.amt});
+  for(const m of (history.months||[])) for(const it of (m.items||[])) if((it.name||'').trim()===k) rows.push({ym:m.ym, d:it.d, amt:it.amt});
+  rows.sort((a,b)=> b.ym===a.ym ? b.d-a.d : b.ym.localeCompare(a.ym));
+  return rows;
+}
+
+function renderSearchSuggest(q){
+  const el=$('searchSuggest'), query=q.trim();
+  if(!query){ el.innerHTML=''; el.classList.add('hidden'); return; }
+  const hits=knownMerchants().filter(n=>n.includes(query)).slice(0,8);
+  if(!hits.length){ el.innerHTML=''; el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.innerHTML=hits.map(n=>'<div class="row tap" data-name="'+esc(n)+'"><span class="lbl">'+esc(n)+'</span></div>').join('');
+}
+
+function renderSearchResults(name){
+  const resEl=$('searchResults'), csvBtn=$('searchCsvBtn');
+  const k=name.trim();
+  if(!k){ resEl.innerHTML=''; csvBtn.classList.add('hidden'); return; }
+  const rows=searchResults(k);
+  if(!rows.length){
+    resEl.innerHTML='<div class="blank"><div class="t">אין עסקאות בשם הזה, לא החודש ולא ב-'+((history.months||[]).length)+' החודשים שלפניו.</div></div>';
+    csvBtn.classList.add('hidden');
+    return;
+  }
+  csvBtn.classList.remove('hidden');
+  // Year, then month, newest first — the grouping asked for. rows is already sorted
+  // newest-first, so each group's own order falls out for free.
+  const years=[];
+  for(const r of rows){
+    const y=r.ym.slice(0,4);
+    let yg=years.find(g=>g.y===y);
+    if(!yg){ yg={y,months:[]}; years.push(yg); }
+    let mg=yg.months.find(g=>g.ym===r.ym);
+    if(!mg){ mg={ym:r.ym,rows:[],total:0}; yg.months.push(mg); }
+    mg.rows.push(r); mg.total+=r.amt;
+  }
+  resEl.innerHTML=years.map(yg=>
+    '<h3 style="margin:18px 0 2px; font-size:17px">'+yg.y+'</h3>'
+    + yg.months.map(mg=>{
+        const mName=MONTHS[parseInt(mg.ym.slice(5,7),10)-1];
+        return '<div class="row" style="border-bottom:none; padding-bottom:4px">'
+          + '<span class="lbl"><b>'+mName+'</b></span><span class="val num">'+fmt(mg.total)+'</span></div>'
+          + mg.rows.map(r=>{
+              const when = r.d>0 ? r.d+' ב'+mName : 'חיוב מקנייה קודמת';
+              return '<div class="row" style="padding:8px 0"><span class="lbl" style="color:var(--ink-3)">'+esc(when)+'</span>'
+                + '<span class="val num">'+fmt(r.amt)+'</span></div>';
+            }).join('');
+      }).join('')
+  ).join('');
+}
+
+function openSearch(prefill){
+  $('searchInput').value=prefill||'';
+  $('searchSuggest').innerHTML=''; $('searchSuggest').classList.add('hidden');
+  renderSearchResults(prefill||'');
+  $('searchScrim').classList.add('open'); $('searchSheet').classList.add('open');
+  if(!prefill) setTimeout(()=>$('searchInput').focus(),300);
+}
+function closeSearch(){
+  $('searchScrim').classList.remove('open'); $('searchSheet').classList.remove('open');
+}
+
+// A BOM so Excel reads the Hebrew as UTF-8 instead of guessing wrong and showing מוגם.
+function downloadCsv(name){
+  const rows=searchResults(name);
+  const esc2=s=>'"'+String(s).replace(/"/g,'""')+'"';
+  const lines=['תאריך,בית עסק,סכום']
+    .concat(rows.map(r=>{
+      const mName=MONTHS[parseInt(r.ym.slice(5,7),10)-1];
+      const when=r.d>0 ? r.d+' ב'+mName+' '+r.ym.slice(0,4) : 'ללא תאריך מדויק ('+mName+' '+r.ym.slice(0,4)+')';
+      return [esc2(when), esc2(name), r.amt].join(',');
+    }));
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='עסקאות - '+name+'.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
 /* ---------------- sheet ---------------- */
 // Pure: takes the figure to describe rather than reading the saved one, so the hint can
 // preview a value being typed without touching the budget the app is currently using.
@@ -2746,6 +2867,27 @@ $('summaryScrim').addEventListener('click',closeSummary);
 $('summaryCloseBtn').addEventListener('click',closeSummary);
 $('summaryPrev').addEventListener('click',()=>summaryStep(1));
 $('summaryNext').addEventListener('click',()=>summaryStep(-1));
+
+$('searchBtn').addEventListener('click',()=>openSearch());
+$('searchScrim').addEventListener('click',closeSearch);
+$('searchCloseBtn').addEventListener('click',closeSearch);
+$('searchInput').addEventListener('input',e=>{
+  renderSearchSuggest(e.target.value);
+  renderSearchResults(e.target.value);
+});
+// Delegated: the suggestion list is rebuilt through innerHTML on every keystroke.
+$('searchSuggest').addEventListener('click',e=>{
+  const row=e.target.closest('[data-name]'); if(!row) return;
+  $('searchInput').value=row.dataset.name;
+  $('searchSuggest').innerHTML=''; $('searchSuggest').classList.add('hidden');
+  renderSearchResults(row.dataset.name);
+});
+$('searchCsvBtn').addEventListener('click',()=>{
+  const name=$('searchInput').value.trim(); if(name) downloadCsv(name);
+});
+$('tierHistoryBtn').addEventListener('click',()=>{
+  const name=tierTarget; closeTier(); if(name) openSearch(name);
+});
 
 $('investigateBtn').addEventListener('click',()=>{
   const p=$('investigatePanel');
